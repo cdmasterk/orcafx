@@ -1,0 +1,130 @@
+/* ===== ROOT APP SHELL ===== */
+.app-shell { 
+  height: 100vh; 
+  display: flex; 
+  flex-direction: column; 
+}
+
+/* Layout (Sidebar + Content) */
+.layout {
+  display: flex;
+  flex: 1;
+  height: calc(100vh - 56px); /* 56px je Navbar */
+  overflow: hidden;
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 240px;
+  background: #0A6ED1; /* SAP Fiori plava */
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20px 14px;
+}
+
+.sidebar h2 { 
+  margin: 0 0 16px 0; 
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff; 
+}
+
+.sidebar nav { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 12px; 
+}
+
+.sidebar a { 
+  color: #e3f2fd; 
+  font-weight: 600; 
+  text-decoration: none; 
+  font-size: 14px;
+  transition: color 0.2s ease, transform 0.15s ease;
+}
+
+.sidebar a:hover { 
+  color: #ffffff; 
+  transform: translateX(2px);
+}
+
+.sidebar-bottom { 
+  margin-top: 20px; 
+}
+
+.sidebar-bottom a { 
+  color: #ffd54f; /* Zlatna nijansa za Admin link */
+  text-decoration: none; 
+  font-weight: 700; 
+  font-size: 14px;
+}
+
+/* ===== CONTENT AREA ===== */
+.content {
+  flex: 1;
+  overflow: auto;
+  background: #f4f6f8;
+  padding: 20px;
+}
+
+/* ===== WIDGET (Metal prices) ===== */
+.sidebar-widget {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 14px;
+  margin: 16px 0;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  text-align: left;
+  color: #333;
+}
+
+.sidebar-widget h4 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0A6ED1;
+}
+
+.sidebar-widget p {
+  margin: 4px 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.sidebar-widget small {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #666;
+}
+
+.trend-chart {
+  margin-top: 12px;
+  height: 120px;
+}
+.refresh-btn {
+  background: #0A6ED1;
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-top: 10px;
+  width: 100%;
+  font-weight: 600;
+  transition: background 0.2s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #095ab5;
+}
+
+.refresh-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}

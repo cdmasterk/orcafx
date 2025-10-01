@@ -1,0 +1,6 @@
+[
+  { "code": "AB0000001", "name": "Prsten zlato 585", "price": 199.99, "taxRate": 25, "material": "Zlato", "purity": "585", "stock": 5 },
+  { "code": "AB0000002", "name": "Ogrlica srebro 925", "price": 79.90,  "taxRate": 25, "material": "Srebro", "purity": "925", "stock": 12 },
+  { "code": "AB0000003", "name": "Naušnice čelik",    "price": 29.50,  "taxRate": 25, "material": "Čelik", "purity": "",   "stock": 20 },
+  { "code": "AB0000004", "name": "Tradicionalni Šibenski prsten 585", "price": 249.00, "taxRate": 25, "material": "Zlato", "purity": "585", "stock": 3 }
+]

@@ -1,0 +1,155 @@
+.service-admin {
+  background: #fff;
+  padding: 24px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.service-admin h2 {
+  font-size: 22px;
+  margin-bottom: 16px;
+  color: #0A6ED1;
+}
+
+.service-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.service-form input {
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  flex: 1;
+}
+
+.service-form button {
+  background: #0A6ED1;
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s ease;
+}
+
+.service-form button:hover {
+  background: #095ab5;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 8px 10px;
+  text-align: center;
+}
+
+th {
+  background: #f5f7fa;
+  font-weight: 600;
+}
+
+tr:nth-child(even) {
+  background: #fafafa;
+}
+
+.btn-delete {
+  background: #d9534f;
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s ease;
+}
+
+.btn-delete:hover {
+  background: #c9302c;
+}
+.btn-edit {
+  background: #ffc107;
+  color: #000;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-right: 6px;
+  transition: background 0.2s ease;
+}
+
+.btn-edit:hover {
+  background: #e0a800;
+}
+
+.btn-save {
+  background: #28a745;
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-right: 6px;
+  transition: background 0.2s ease;
+}
+
+.btn-save:hover {
+  background: #218838;
+}
+
+.btn-cancel {
+  background: #6c757d;
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s ease;
+}
+
+.btn-cancel:hover {
+  background: #5a6268;
+}
+.import-export {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.import-export button,
+.import-label {
+  background: #0A6ED1;
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background 0.2s ease;
+}
+
+.import-export button:hover,
+.import-label:hover {
+  background: #095ab5;
+}
+
+.import-label {
+  display: inline-block;
+  cursor: pointer;
+}
+
+.import-label input {
+  display: none;
+}

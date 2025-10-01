@@ -1,0 +1,61 @@
+.inventory {
+  background: #fff;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+.inventory-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.inv-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.inv-table th,
+.inv-table td {
+  border: 1px solid #f0f0f0;
+  padding: 8px;
+  text-align: left;
+}
+
+.inv-table input {
+  width: 80px;
+  padding: 4px;
+}
+
+.btn {
+  background: #0056d2;
+  color: white;
+  border: none;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: #0046b0;
+}
+
+.btn.secondary {
+  background: #4caf50;
+}
+
+.btn.secondary:hover {
+  background: #43a047;
+}
+
+.btn.small {
+  padding: 6px 8px;
+  font-size: 13px;
+}

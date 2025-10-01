@@ -1,0 +1,137 @@
+.sessions-report {
+  background: #fff;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+.sessions-report h2 {
+  margin-bottom: 12px;
+  color: #0A6ED1;
+}
+
+.sessions-report table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.sessions-report th,
+.sessions-report td {
+  border: 1px solid #ddd;
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.sessions-report th {
+  background: #f9f9f9;
+  font-weight: 600;
+}
+
+.sessions-report tr:nth-child(even) {
+  background: #fafafa;
+}
+
+.open-label {
+  color: green;
+  font-weight: bold;
+}
+
+.closed-label {
+  color: red;
+  font-weight: bold;
+}
+
+.btn.danger.small {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background: #d9534f;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn.danger.small:hover {
+  background: #c9302c;
+}
+
+/* Modal stilovi */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.modal-content h3 {
+  margin-top: 0;
+  color: #0A6ED1;
+}
+
+.modal-content label {
+  display: block;
+  margin-top: 12px;
+  font-weight: 600;
+}
+
+.modal-content input {
+  width: 100%;
+  padding: 6px;
+  margin-top: 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.modal-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn.confirm {
+  background: #0A6ED1;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn.confirm:hover {
+  background: #095ab5;
+}
+
+.btn.cancel {
+  background: #ccc;
+  color: #333;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn.cancel:hover {
+  background: #bbb;
+}
+.bank-calc {
+  margin-top: 10px;
+  font-weight: bold;
+  color: #0A6ED1;
+}

@@ -1,0 +1,27 @@
+.metal-widget {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 16px;
+  font-size: 13px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.metal-widget h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: #0A6ED1;
+}
+
+.metal-widget p {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.metal-widget small {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #666;
+}
