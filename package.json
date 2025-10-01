@@ -2,6 +2,9 @@
   "name": "orca-erp",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "18.x"
+  },
   "dependencies": {
     "@react-pdf/renderer": "^3.4.3",
     "@supabase/supabase-js": "^2.43.4",
@@ -47,7 +50,4 @@
     "ajv": "^6.12.6",
     "ajv-keywords": "^3.5.2"
   }
-}
-"engines": {
-  "node": "18.x"
 }
