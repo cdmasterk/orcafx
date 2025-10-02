@@ -1,7 +1,8 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import "./Dashboard.css";
-import MetalPricesTable from "../reports/MetalPricesTable"; 
+import MetalPricesCharts from "../reports/MetalPricesCharts"; // ✅ grafovi FX stil
+import MetalPricesTable from "../reports/MetalPricesTable";   // ✅ tablica ispod
 
 export default function Dashboard() {
   const shortcuts = [
@@ -29,9 +30,15 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Informativni widget – cijene metala */}
+      {/* Grafovi burzovni stil */}
+      <div className="dashboard-widget">
+        <MetalPricesCharts />
+      </div>
+
+      {/* Tablica ispod grafova */}
       <div className="dashboard-widget">
         <div className="dashboard-widget-header">
+          <h3>📋 Metal Prices — Tablica</h3>
         </div>
         <MetalPricesTable />
       </div>

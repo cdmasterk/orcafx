@@ -1,0 +1,59 @@
+.light-theme {
+  background: #ffffff; /* bijela pozadina */
+  color: #111;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.mpc-title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+.mpc-range {
+  display: flex;
+  gap: 6px;
+}
+
+.mpc-chip {
+  border: 1px solid #ddd;
+  background: #f3f4f6;
+  color: #111;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.mpc-chip.active {
+  background: #16c784;
+  border-color: #16c784;
+  color: #fff;
+}
+
+.fx-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.fx-ticker {
+  font-weight: 700;
+  font-size: 1rem;
+}
+.fx-ticker.up {
+  color: #16c784;
+}
+.fx-ticker.down {
+  color: #ef4444;
+}
+
+.mpc-chart-card {
+  background: #fff;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #eee;
+}

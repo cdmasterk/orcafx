@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import "./Sidebar.css";
 
 export default function Sidebar() {
@@ -22,17 +22,13 @@ export default function Sidebar() {
           </li>
           <li>
             <Link to="/custom-orders">📑 Custom narudžbe</Link>
-        
           </li>
           <li>
-  <NavLink to="/reports/sessions">
-    📊 Smjene
-  </NavLink>
-</li>
+            <NavLink to="/reports/sessions">📊 Smjene</NavLink>
+          </li>
         </ul>
       </nav>
 
-      {/* Admin link na dnu */}
       <div className="sidebar-bottom">
         <Link to="/admin">⚙️ Admin</Link>
       </div>
