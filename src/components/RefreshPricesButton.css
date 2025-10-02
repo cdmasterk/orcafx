@@ -1,0 +1,34 @@
+.refresh-button {
+  background-color: #0070f3; /* Vercel plava / SAP Fiori naglasak */
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.refresh-button:hover {
+  background-color: #005bb5; /* malo tamnija plava na hover */
+}
+
+.refresh-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.refresh-status {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.refresh-status.success {
+  color: #2e7d32; /* zelena */
+}
+
+.refresh-status.error {
+  color: #c62828; /* crvena */
+}

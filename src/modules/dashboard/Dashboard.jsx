@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import "./Dashboard.css";
-import MetalPricesTable from "../reports/MetalPricesTable"; // ✅ widget s cijenama
+import MetalPricesTable from "../reports/MetalPricesTable"; 
 
 export default function Dashboard() {
   const shortcuts = [
@@ -31,6 +31,8 @@ export default function Dashboard() {
 
       {/* Informativni widget – cijene metala */}
       <div className="dashboard-widget">
+        <div className="dashboard-widget-header">
+        </div>
         <MetalPricesTable />
       </div>
     </div>

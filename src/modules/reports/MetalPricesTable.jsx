@@ -36,15 +36,48 @@ export default function MetalPricesTable() {
 
   const handleRefresh = async () => {
     setLoading(true);
-    const { error } = await supabase.rpc("fetch_metal_prices");
-    if (error) {
-      console.error(error);
-      toast.error("Greška kod osvježavanja cijena (RPC).");
-    } else {
-      toast.success("Cijene osvježene.");
+    try {
+      const res = await fetch(
+        `${process.env.REACT_APP_SUPABASE_URL.replace(
+          ".supabase.co",
+          ".functions.supabase.co"
+        )}/fetch_metal_prices`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      // log cijelog response-a za debug
+      console.log("🔎 Edge Function status:", res.status, res.statusText);
+
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        console.warn("⚠️ Response nije validan JSON:", parseErr);
+      }
+      console.log("🔎 Edge Function response body:", data);
+
+      if (!res.ok) {
+        throw new Error(data?.error || `Edge Function error (${res.status})`);
+      }
+
+      // uvijek osvježi tablicu
       await fetchData({ limit });
+
+      // uvijek success toast kad status === 200
+      toast.success("Cijene uspješno osvježene.");
+    } catch (err) {
+      console.error("❌ Refresh error:", err);
+      await fetchData({ limit }); // fallback – povuci zadnje stanje
+      toast.error("Greška kod osvježavanja cijena (Edge Function).");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const fmt2 = (v) => (v == null ? "-" : Number(v).toFixed(2));
@@ -81,7 +114,11 @@ export default function MetalPricesTable() {
               <option value={30}>30</option>
             </select>
           </label>
-          <button className="btn refresh" onClick={handleRefresh} disabled={loading}>
+          <button
+            className="btn refresh"
+            onClick={handleRefresh}
+            disabled={loading}
+          >
             {loading ? "⏳ Osvježavam..." : "🔄 Osvježi odmah"}
           </button>
         </div>
@@ -107,7 +144,8 @@ export default function MetalPricesTable() {
             {rows.length === 0 && !loading && (
               <tr>
                 <td colSpan="10" className="empty">
-                  Nema podataka u bazi. Pritisni “Osvježi odmah” za ručno dohvaćanje.
+                  Nema podataka u bazi. Pritisni “Osvježi odmah” za ručno
+                  dohvaćanje.
                 </td>
               </tr>
             )}

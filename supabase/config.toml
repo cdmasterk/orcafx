@@ -1,0 +1,13 @@
+# Supabase project configuration file
+# Vi možeš ovdje imati i druge sekcije (db, auth, storage...)
+
+[functions.fetch_metal_prices]
+enabled = true
+verify_jwt = true
+import_map = "./functions/fetch_metal_prices/deno.json"
+entrypoint = "./functions/fetch_metal_prices/index.ts"
+# static_files = [ "./functions/fetch_metal_prices/*.html" ]
+
+# ⏰ Scheduler: automatski pokreće funkciju svaka 3 sata (00:00, 03:00, 06:00, ...)
+[functions.fetch_metal_prices.schedules.every_3h]
+schedule = "0 */3 * * *"
