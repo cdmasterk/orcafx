@@ -1,0 +1,25 @@
+name: Sync OrcaFX Plan to GitHub Project
+
+on:
+  push:
+    paths:
+      - 'docs/ORCAFX_CORE_PLAN.md'
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run sync script
+        env:
+          GH_TOKEN: ${{ secrets.ORCA_GH_TOKEN }}   # koristi secret
+          GH_OWNER: cdmasterk                  # ⬅️ promijeni u svoj GitHub username
+          GH_OWNER_TYPE: user                      # ili 'org' ako je projekt pod organizacijom
+          GH_PROJECT_NUMBER: '6'                   # ⬅️ broj iz URL-a projekta
+        run: node scripts/syncPlanToGitHub.mjs
