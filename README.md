@@ -68,3 +68,32 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+
+## 📌 ORCAFX Roadmap Sync
+
+Roadmap se održava kroz **jedan izvor istine**:  
+- `docs/ORCAFX_CORE_PLAN.md` (tekstualni plan u repozitoriju)  
+- GitHub Project **[OrcaFX Roadmap](https://github.com/users/cdmasterk/projects/6)**  
+
+### 🔄 Automatizacija
+
+Sync je **dvosmjeran** i radi preko GitHub Actions:
+
+- **Plan → GitHub (push mode)**  
+  - Svaki commit u `docs/ORCAFX_CORE_PLAN.md` pokreće sync.  
+  - Novi moduli iz plana kreiraju se kao **Issues** u repou i dodaju u Project.  
+  - Status se automatski postavlja (`MVP`, `Phase 2`, `Phase 3`, `Phase 4`).  
+
+- **GitHub → Plan (pull mode)**  
+  - Svako jutro u 06:00 UTC (08:00 CET) Project se povlači i ažurira `ORCAFX_CORE_PLAN.md`.  
+  - Time se promjene iz Projecta (npr. ručno promijenjen Status) vraćaju u repozitorij.  
+  - Promjene se automatski commitaju pod `github-actions[bot]`.  
+
+### 🛠️ Ručno pokretanje
+
+Možeš pokrenuti sync i lokalno:
+
+- **Plan → GitHub**
+  ```bash
+  node scripts/syncPlanToGitHub.mjs --push
