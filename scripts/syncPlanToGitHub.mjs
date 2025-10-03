@@ -50,7 +50,23 @@ function parseModules(md) {
   const md = fs.readFileSync(PLAN_FILE, "utf-8");
   const modules = parseModules(md);
 
-  // 1) Get project info + status field
+  // 1) Get repoId + existing issues
+  const repoQ = `
+    query($owner: String!, $name: String!) {
+      repository(owner:$owner, name:$name) {
+        id
+        issues(first: 100, orderBy:{field:CREATED_AT, direction:DESC}) {
+          nodes { id title number }
+        }
+      }
+    }
+  `;
+  const repoData = await ghGraphQL(repoQ, { owner: GH_OWNER, name: GH_REPO });
+  const repoId = repoData.repository.id;
+  const existingIssues = repoData.repository.issues.nodes;
+  const existingTitles = new Set(existingIssues.map(i => i.title));
+
+  // 2) Get project + status field
   const projectQuery = `
     query($login: String!, $number: Int!) {
       ${GH_OWNER_TYPE}(login: $login) {
@@ -80,9 +96,16 @@ function parseModules(md) {
   console.log(`✅ Found project: ${project.title}`);
   const statusField = project.fields.nodes.find(f => f.name === "Status");
 
-  // 2) For each module → create issue in repo
+  // 3) Loop modules
   for (const m of modules) {
-    console.log(`➕ Creating issue for: ${m.title}`);
+    if (existingTitles.has(m.title)) {
+      console.log(`• Skip (already exists): ${m.title}`);
+      continue;
+    }
+
+    console.log(`➕ Creating new issue for: ${m.title}`);
+
+    // Create issue
     const issueMutation = `
       mutation($repo: ID!, $title: String!) {
         createIssue(input:{repositoryId:$repo, title:$title}) {
@@ -90,20 +113,10 @@ function parseModules(md) {
         }
       }
     `;
-
-    // Get repoId
-    const repoQ = `
-      query($owner: String!, $name: String!) {
-        repository(owner:$owner, name:$name) { id }
-      }
-    `;
-    const repoData = await ghGraphQL(repoQ, { owner: GH_OWNER, name: GH_REPO });
-    const repoId = repoData.repository.id;
-
     const issue = await ghGraphQL(issueMutation, { repo: repoId, title: m.title });
     const issueId = issue.createIssue.issue.id;
 
-    // 3) Add issue to project
+    // Add to project
     const addMutation = `
       mutation($projectId:ID!, $contentId:ID!) {
         addProjectV2ItemById(input:{projectId:$projectId, contentId:$contentId}) {
@@ -117,7 +130,7 @@ function parseModules(md) {
     });
     const itemId = added.addProjectV2ItemById.item.id;
 
-    // 4) Set Status
+    // Set Status
     if (statusField) {
       const option = statusField.options.find(o => o.name === m.phase);
       if (option) {
