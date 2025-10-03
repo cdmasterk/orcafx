@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import fetch from "node-fetch";
 import fs from "fs";
 
 const GH_TOKEN = process.env.GH_TOKEN;
