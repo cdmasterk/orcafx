@@ -2,26 +2,24 @@
 import fs from "fs";
 import { execSync } from "child_process";
 
+// --- Config ---
 const GH_TOKEN = process.env.GH_TOKEN;
 const GH_OWNER = "cdmasterk";     // tvoj username
 const GH_OWNER_TYPE = "user";
 const GH_PROJECT_NUMBER = 6;
 const PLAN_FILE = "docs/ORCAFX_CORE_PLAN.md";
 
-// --- Automatski izvuci ime repozitorija iz git remote ---
+// --- Auto-detect repo name ---
 let GH_REPO = "orcafx"; // fallback
 try {
   const remoteUrl = execSync("git config --get remote.origin.url").toString().trim();
-  // primjer: https://github.com/cdmasterk/orca-erp.git
   const match = remoteUrl.match(/github\.com[:/][^/]+\/(.+?)(\.git)?$/);
-  if (match) {
-    GH_REPO = match[1];
-  }
+  if (match) GH_REPO = match[1];
 } catch (err) {
   console.warn("⚠️ Cannot detect repo from git remote, using fallback:", GH_REPO);
 }
 
-// --- GraphQL helper
+// --- GraphQL helper ---
 async function ghGraphQL(query, variables) {
   const res = await fetch("https://api.github.com/graphql", {
     method: "POST",
@@ -39,7 +37,7 @@ async function ghGraphQL(query, variables) {
   return json.data;
 }
 
-// --- Parse modules
+// --- Parse modules from Markdown ---
 function parseModules(md) {
   const lines = md.split("\n");
   const out = [];
@@ -59,50 +57,39 @@ function parseModules(md) {
   return out;
 }
 
-(async () => {
+// --- PUSH: Plan → GitHub ---
+async function pushPlan() {
   const md = fs.readFileSync(PLAN_FILE, "utf-8");
   const modules = parseModules(md);
 
-  // 1) Get repoId + existing issues
+  // Repo ID
   const repoQ = `
     query($owner: String!, $name: String!) {
       repository(owner:$owner, name:$name) {
         id
-        issues(first: 100, orderBy:{field:CREATED_AT, direction:DESC}) {
-          nodes { id title number }
-        }
+        issues(first: 100) { nodes { id title number } }
       }
     }
   `;
   const repoData = await ghGraphQL(repoQ, { owner: GH_OWNER, name: GH_REPO });
-  if (!repoData.repository) {
-    console.error("❌ Repo not found:", GH_OWNER, GH_REPO);
-    process.exit(1);
-  }
+  if (!repoData.repository) throw new Error("Repo not found");
   const repoId = repoData.repository.id;
   const existingIssues = repoData.repository.issues.nodes;
 
-  // 2) Get project + status field + items
-  const projectQuery = `
+  // Project
+  const projectQ = `
     query($login: String!, $number: Int!) {
-      ${GH_OWNER_TYPE}(login: $login) {
-        projectV2(number: $number) {
+      ${GH_OWNER_TYPE}(login:$login) {
+        projectV2(number:$number) {
           id
           title
           items(first: 100) {
-            nodes {
-              id
-              content {
-                ... on Issue { id title number }
-              }
-            }
+            nodes { id content { ... on Issue { id title number } } }
           }
           fields(first: 20) {
             nodes {
               ... on ProjectV2SingleSelectField {
-                id
-                name
-                options { id name }
+                id name options { id name }
               }
             }
           }
@@ -110,104 +97,51 @@ function parseModules(md) {
       }
     }
   `;
-  const pdata = await ghGraphQL(projectQuery, {
-    login: GH_OWNER,
-    number: GH_PROJECT_NUMBER,
-  });
+  const pdata = await ghGraphQL(projectQ, { login: GH_OWNER, number: GH_PROJECT_NUMBER });
   const project = pdata?.[GH_OWNER_TYPE]?.projectV2;
   if (!project) throw new Error("Project not found");
-
-  console.log(`✅ Found project: ${project.title}`);
   const statusField = project.fields.nodes.find(f => f.name === "Status");
 
-  // 3) Loop modules
+  console.log(`✅ Found project: ${project.title}`);
+
   for (const m of modules) {
     const existing = existingIssues.find(i => i.title === m.title);
+    let issueId = existing?.id;
 
-    if (existing) {
-      console.log(`• Found existing issue: ${m.title}`);
-
-      // Find project item for this issue
-      const projectItem = project.items.nodes.find(
-        it => it.content?.id === existing.id
-      );
-
-      // If not in project → add
-      if (!projectItem) {
-        console.log(`➕ Adding ${m.title} to project`);
-        const addMutation = `
-          mutation($projectId:ID!, $contentId:ID!) {
-            addProjectV2ItemById(input:{projectId:$projectId, contentId:$contentId}) {
-              item { id }
-            }
+    // Create if missing
+    if (!existing) {
+      console.log(`➕ Creating issue: ${m.title}`);
+      const createIssue = `
+        mutation($repo: ID!, $title: String!) {
+          createIssue(input:{repositoryId:$repo, title:$title}) {
+            issue { id title number }
           }
-        `;
-        await ghGraphQL(addMutation, {
-          projectId: project.id,
-          contentId: existing.id,
-        });
-      }
-
-      // Update Status if needed
-      if (statusField && projectItem) {
-        const option = statusField.options.find(o => o.name === m.phase);
-        if (option) {
-          console.log(`⚙️ Ensuring status '${m.phase}' for ${m.title}`);
-          const setFieldMutation = `
-            mutation($projectId:ID!, $itemId:ID!, $fieldId:ID!, $optionId:String!) {
-              updateProjectV2ItemFieldValue(
-                input:{
-                  projectId:$projectId,
-                  itemId:$itemId,
-                  fieldId:$fieldId,
-                  value:{singleSelectOptionId:$optionId}
-                }
-              ){ projectV2Item { id } }
-            }
-          `;
-          await ghGraphQL(setFieldMutation, {
-            projectId: project.id,
-            itemId: projectItem.id,
-            fieldId: statusField.id,
-            optionId: option.id,
-          });
         }
-      }
-
-      continue;
+      `;
+      const issue = await ghGraphQL(createIssue, { repo: repoId, title: m.title });
+      issueId = issue.createIssue.issue.id;
     }
 
-    // Create new issue
-    console.log(`➕ Creating new issue for: ${m.title}`);
-    const issueMutation = `
-      mutation($repo: ID!, $title: String!) {
-        createIssue(input:{repositoryId:$repo, title:$title}) {
-          issue { id number title }
-        }
-      }
-    `;
-    const issue = await ghGraphQL(issueMutation, { repo: repoId, title: m.title });
-    const issueId = issue.createIssue.issue.id;
-
     // Add to project
-    const addMutation = `
-      mutation($projectId:ID!, $contentId:ID!) {
-        addProjectV2ItemById(input:{projectId:$projectId, contentId:$contentId}) {
-          item { id }
+    const item = project.items.nodes.find(it => it.content?.title === m.title);
+    let itemId = item?.id;
+    if (!itemId) {
+      const addMutation = `
+        mutation($projectId:ID!, $contentId:ID!) {
+          addProjectV2ItemById(input:{projectId:$projectId, contentId:$contentId}) {
+            item { id }
+          }
         }
-      }
-    `;
-    const added = await ghGraphQL(addMutation, {
-      projectId: project.id,
-      contentId: issueId,
-    });
-    const itemId = added.addProjectV2ItemById.item.id;
+      `;
+      const added = await ghGraphQL(addMutation, { projectId: project.id, contentId: issueId });
+      itemId = added.addProjectV2ItemById.item.id;
+    }
 
-    // Set Status
+    // Update status
     if (statusField) {
       const option = statusField.options.find(o => o.name === m.phase);
       if (option) {
-        const setFieldMutation = `
+        const setField = `
           mutation($projectId:ID!, $itemId:ID!, $fieldId:ID!, $optionId:String!) {
             updateProjectV2ItemFieldValue(
               input:{
@@ -219,18 +153,65 @@ function parseModules(md) {
             ){ projectV2Item { id } }
           }
         `;
-        await ghGraphQL(setFieldMutation, {
+        await ghGraphQL(setField, {
           projectId: project.id,
           itemId,
           fieldId: statusField.id,
           optionId: option.id,
         });
         console.log(`✅ Set status '${m.phase}' for ${m.title}`);
-      } else {
-        console.warn(`⚠️ No status option for '${m.phase}'`);
       }
     }
   }
+  console.log("🎉 Push complete.");
+}
 
-  console.log("🎉 Sync completed.");
-})();
+// --- PULL: GitHub → Plan ---
+async function pullPlan() {
+  const projectQ = `
+    query($login: String!, $number: Int!) {
+      ${GH_OWNER_TYPE}(login:$login) {
+        projectV2(number:$number) {
+          title
+          items(first: 100) {
+            nodes {
+              content { ... on Issue { title } }
+              fieldValues(first: 10) {
+                nodes {
+                  ... on ProjectV2ItemFieldSingleSelectValue {
+                    name
+                    field { ... on ProjectV2SingleSelectField { name } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+  const pdata = await ghGraphQL(projectQ, { login: GH_OWNER, number: GH_PROJECT_NUMBER });
+  const project = pdata?.[GH_OWNER_TYPE]?.projectV2;
+  if (!project) throw new Error("Project not found");
+
+  let md = `# ORCAFX Core Plan\n\n`;
+  let currentPhase = "";
+  for (const item of project.items.nodes) {
+    const title = item.content?.title;
+    if (!title) continue;
+    const status = item.fieldValues.nodes.find(f => f.field.name === "Status")?.name || "Backlog";
+    if (status !== currentPhase) {
+      md += `\n### ${status}\n`;
+      currentPhase = status;
+    }
+    md += `- **${title}**\n`;
+  }
+  fs.writeFileSync(PLAN_FILE, md, "utf-8");
+  console.log(`📥 Pulled project into ${PLAN_FILE}`);
+}
+
+// --- Entrypoint ---
+const mode = process.argv[2];
+if (mode === "--push") pushPlan();
+else if (mode === "--pull") pullPlan();
+else console.log("Usage: node scripts/syncPlanToGitHub.mjs --push | --pull");
