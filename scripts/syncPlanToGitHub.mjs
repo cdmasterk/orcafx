@@ -1,12 +1,25 @@
 #!/usr/bin/env node
 import fs from "fs";
+import { execSync } from "child_process";
 
 const GH_TOKEN = process.env.GH_TOKEN;
 const GH_OWNER = "cdmasterk";     // tvoj username
-const GH_REPO = "orcafx";         // ime repozitorija
 const GH_OWNER_TYPE = "user";
 const GH_PROJECT_NUMBER = 6;
 const PLAN_FILE = "docs/ORCAFX_CORE_PLAN.md";
+
+// --- Automatski izvuci ime repozitorija iz git remote ---
+let GH_REPO = "orcafx"; // fallback
+try {
+  const remoteUrl = execSync("git config --get remote.origin.url").toString().trim();
+  // primjer: https://github.com/cdmasterk/orca-erp.git
+  const match = remoteUrl.match(/github\.com[:/][^/]+\/(.+?)(\.git)?$/);
+  if (match) {
+    GH_REPO = match[1];
+  }
+} catch (err) {
+  console.warn("⚠️ Cannot detect repo from git remote, using fallback:", GH_REPO);
+}
 
 // --- GraphQL helper
 async function ghGraphQL(query, variables) {
@@ -21,7 +34,7 @@ async function ghGraphQL(query, variables) {
   const json = await res.json();
   if (json.errors) {
     console.error("❌ GraphQL errors:", JSON.stringify(json.errors, null, 2));
-    process.exit(1);
+    throw new Error(JSON.stringify(json.errors, null, 2));
   }
   return json.data;
 }
@@ -62,17 +75,28 @@ function parseModules(md) {
     }
   `;
   const repoData = await ghGraphQL(repoQ, { owner: GH_OWNER, name: GH_REPO });
+  if (!repoData.repository) {
+    console.error("❌ Repo not found:", GH_OWNER, GH_REPO);
+    process.exit(1);
+  }
   const repoId = repoData.repository.id;
   const existingIssues = repoData.repository.issues.nodes;
-  const existingTitles = new Set(existingIssues.map(i => i.title));
 
-  // 2) Get project + status field
+  // 2) Get project + status field + items
   const projectQuery = `
     query($login: String!, $number: Int!) {
       ${GH_OWNER_TYPE}(login: $login) {
         projectV2(number: $number) {
           id
           title
+          items(first: 100) {
+            nodes {
+              id
+              content {
+                ... on Issue { id title number }
+              }
+            }
+          }
           fields(first: 20) {
             nodes {
               ... on ProjectV2SingleSelectField {
@@ -98,14 +122,63 @@ function parseModules(md) {
 
   // 3) Loop modules
   for (const m of modules) {
-    if (existingTitles.has(m.title)) {
-      console.log(`• Skip (already exists): ${m.title}`);
+    const existing = existingIssues.find(i => i.title === m.title);
+
+    if (existing) {
+      console.log(`• Found existing issue: ${m.title}`);
+
+      // Find project item for this issue
+      const projectItem = project.items.nodes.find(
+        it => it.content?.id === existing.id
+      );
+
+      // If not in project → add
+      if (!projectItem) {
+        console.log(`➕ Adding ${m.title} to project`);
+        const addMutation = `
+          mutation($projectId:ID!, $contentId:ID!) {
+            addProjectV2ItemById(input:{projectId:$projectId, contentId:$contentId}) {
+              item { id }
+            }
+          }
+        `;
+        await ghGraphQL(addMutation, {
+          projectId: project.id,
+          contentId: existing.id,
+        });
+      }
+
+      // Update Status if needed
+      if (statusField && projectItem) {
+        const option = statusField.options.find(o => o.name === m.phase);
+        if (option) {
+          console.log(`⚙️ Ensuring status '${m.phase}' for ${m.title}`);
+          const setFieldMutation = `
+            mutation($projectId:ID!, $itemId:ID!, $fieldId:ID!, $optionId:String!) {
+              updateProjectV2ItemFieldValue(
+                input:{
+                  projectId:$projectId,
+                  itemId:$itemId,
+                  fieldId:$fieldId,
+                  value:{singleSelectOptionId:$optionId}
+                }
+              ){ projectV2Item { id } }
+            }
+          `;
+          await ghGraphQL(setFieldMutation, {
+            projectId: project.id,
+            itemId: projectItem.id,
+            fieldId: statusField.id,
+            optionId: option.id,
+          });
+        }
+      }
+
       continue;
     }
 
+    // Create new issue
     console.log(`➕ Creating new issue for: ${m.title}`);
-
-    // Create issue
     const issueMutation = `
       mutation($repo: ID!, $title: String!) {
         createIssue(input:{repositoryId:$repo, title:$title}) {
@@ -158,4 +231,6 @@ function parseModules(md) {
       }
     }
   }
+
+  console.log("🎉 Sync completed.");
 })();
