@@ -3,9 +3,9 @@ import fetch from "node-fetch";
 import fs from "fs";
 
 const GH_TOKEN = process.env.GH_TOKEN;
-const GH_OWNER = process.env.GH_OWNER;
-const GH_OWNER_TYPE = process.env.GH_OWNER_TYPE; // "user" ili "org"
-const GH_PROJECT_NUMBER = process.env.GH_PROJECT_NUMBER;
+const GH_OWNER = "cdmasterk";      // fiksirano po tvom usernamu
+const GH_OWNER_TYPE = "user";      // jer ide preko /users/
+const GH_PROJECT_NUMBER = 6;       // broj iz URL-a
 const PLAN_FILE = "docs/ORCAFX_CORE_PLAN.md";
 
 // Debug env
@@ -24,17 +24,28 @@ if (!fs.existsSync(PLAN_FILE)) {
 }
 const planContent = fs.readFileSync(PLAN_FILE, "utf-8");
 
-// GraphQL query za dohvat projekta
-const queryProject = `
-  query($login: String!, $number: Int!) {
-    ${GH_OWNER_TYPE}(login: $login) {
-      projectV2(number: $number) {
-        id
-        title
-      }
+// Parsiraj module iz markdowna
+function parseModules(md) {
+  const lines = md.split("\n");
+  const out = [];
+  let phase = "Backlog";
+
+  for (const raw of lines) {
+    const line = raw.trim();
+
+    if (line.startsWith("### 1.")) phase = "MVP";
+    else if (line.startsWith("### 2.")) phase = "Phase 2";
+    else if (line.startsWith("### 3.")) phase = "Phase 3";
+    else if (line.startsWith("### 4.")) phase = "Phase 4";
+
+    if (line.startsWith("- **")) {
+      const m = line.match(/- \*\*(.+?)\*\*/);
+      const name = (m ? m[1] : line).trim();
+      out.push({ title: `${phase} — ${name}` });
     }
   }
-`;
+  return out;
+}
 
 // GraphQL call
 async function ghGraphQL(query, variables) {
@@ -58,9 +69,33 @@ async function ghGraphQL(query, variables) {
 (async () => {
   try {
     console.log("📡 Fetching project…");
+
+    // Dohvati project V2 info
+    const queryProject = `
+      query($login: String!, $number: Int!) {
+        ${GH_OWNER_TYPE}(login: $login) {
+          projectV2(number: $number) {
+            id
+            title
+            items(first: 50) {
+              nodes {
+                id
+                content {
+                  __typename
+                  ... on DraftIssue { title }
+                  ... on Issue { title }
+                  ... on PullRequest { title }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
     const data = await ghGraphQL(queryProject, {
       login: GH_OWNER,
-      number: parseInt(GH_PROJECT_NUMBER, 10),
+      number: GH_PROJECT_NUMBER,
     });
 
     console.log("📡 GraphQL Response:", JSON.stringify(data, null, 2));
@@ -72,13 +107,39 @@ async function ghGraphQL(query, variables) {
     }
 
     console.log(`✅ Found project: ${project.title} (ID: ${project.id})`);
+    const existingTitles = new Set(
+      project.items.nodes.map((n) => n.content?.title).filter(Boolean)
+    );
 
-    // Ovdje bi slijedilo parsiranje plana i sync itema…
-    console.log("📖 Plan content (preview):");
-    console.log(planContent.split("\n").slice(0, 10).join("\n"));
-    console.log("… (truncated)");
+    // Parsiraj module iz plana
+    const modules = parseModules(planContent);
+    console.log("📖 Parsed modules:", modules);
 
-    console.log("🚀 [DEBUG MODE] – sync logic not executed, just tested project access.");
+    // Dodaj nove module kao draft issues
+    for (const m of modules) {
+      if (existingTitles.has(m.title)) {
+        console.log(`• Skip (exists): ${m.title}`);
+        continue;
+      }
+
+      console.log(`➕ Creating: ${m.title}`);
+      const mutation = `
+        mutation($projectId:ID!, $title:String!) {
+          createProjectV2DraftIssue(input:{projectId:$projectId, title:$title}) {
+            draftIssue { id title }
+          }
+        }
+      `;
+
+      const result = await ghGraphQL(mutation, {
+        projectId: project.id,
+        title: m.title,
+      });
+
+      console.log("✅ Created:", result.createProjectV2DraftIssue?.draftIssue?.title);
+    }
+
+    console.log("🎉 Sync completed.");
   } catch (err) {
     console.error("❌ Unexpected error:", err);
     process.exit(1);
