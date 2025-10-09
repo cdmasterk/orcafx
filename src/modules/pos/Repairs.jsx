@@ -1,39 +1,26 @@
-// src/modules/pos/Repairs.jsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
 import { toast } from "react-toastify";
 import "./Repairs.css";
 
-const UNFINISHED = ["PENDING", "RECEIVED", "IN_PROGRESS"];
-const FINISHED = ["READY", "DELIVERED", "CANCELLED"];
-
-function sortRepairs(a, b) {
-  const aUnf = UNFINISHED.includes(a.status);
-  const bUnf = UNFINISHED.includes(b.status);
-  if (aUnf !== bUnf) return aUnf ? -1 : 1;
-  const aDate = a.received_at ? new Date(a.received_at).getTime() : 0;
-  const bDate = b.received_at ? new Date(b.received_at).getTime() : 0;
-  return bDate - aDate;
-}
-
 export default function Repairs({ addToCart }) {
   const [repairs, setRepairs] = useState([]);
-  const [catalog, setCatalog] = useState([]); // dropdown iz repair_catalog
+  const [catalog, setCatalog] = useState([]);
+  const [newRepair, setNewRepair] = useState({
+    repair_no: "",
+    customer_name: "",
+    customer_email: "",
+    repair_catalog_id: "",
+    description: "",
+    total_price: "",
+  });
   const [loading, setLoading] = useState(false);
   const [showMailConfirm, setShowMailConfirm] = useState(false);
   const [sendingMail, setSendingMail] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [pendingRepair, setPendingRepair] = useState(null);
 
-  const [newRepair, setNewRepair] = useState({
-    customer_name: "",
-    customer_email: "",
-    item_code: "",
-    repair_catalog_id: "",
-    description: "",
-    total_price: "",
-  });
-
+  // 📦 Učitavanje kataloga i popravaka
   useEffect(() => {
     fetchCatalog();
     fetchRepairs();
@@ -42,16 +29,20 @@ export default function Repairs({ addToCart }) {
   const fetchCatalog = async () => {
     const { data, error } = await supabase
       .from("repair_catalog")
-      .select("id, repair_name, repair_code, base_price, active")
+      .select("id, repair_code, repair_name, base_price, vat_rate, active")
       .eq("active", true)
       .order("repair_name", { ascending: true });
 
     if (error) {
-      console.error(error);
       toast.error("❌ Greška kod dohvaćanja kataloga popravaka");
       return;
     }
-    setCatalog(data || []);
+
+    const processed = (data || []).map((r) => ({
+      ...r,
+      gross_price: Number(r.base_price) * (1 + (Number(r.vat_rate) || 0) / 100),
+    }));
+    setCatalog(processed);
   };
 
   const fetchRepairs = async () => {
@@ -59,110 +50,112 @@ export default function Repairs({ addToCart }) {
     const { data, error } = await supabase
       .from("repairs")
       .select("*")
-      .order("received_at", { ascending: false });
+      .order("received_at", { ascending: false })
+      .limit(50);
 
     if (error) {
       toast.error("❌ Greška kod dohvaćanja popravaka");
       setLoading(false);
       return;
     }
-    setRepairs((data || []).sort(sortRepairs));
+
+    const ordered = data.sort((a, b) => {
+      const order = ["PENDING", "RECEIVED", "IN_PROGRESS", "READY", "DELIVERED", "CANCELLED"];
+      return order.indexOf(a.status) - order.indexOf(b.status);
+    });
+
+    setRepairs(ordered);
     setLoading(false);
   };
 
-  // === Auto generiranje šifre (RPC s fallbackom) ===
+  // 🔢 Generiranje šifre popravka
   const generateRepairCode = async () => {
-    try {
-      const { data, error } = await supabase.rpc("generate_next_code_preview", {
-        context: "repairs",
-      });
-      if (error || !data) throw new Error("rpc error");
-      return String(data);
-    } catch {
-      const d = new Date();
-      const pad = (n) => String(n).padStart(2, "0");
-      return `REP-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(
-        d.getDate()
-      )}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const { data, error } = await supabase.rpc("generate_next_code_preview", {
+      p_prefix: "REP",
+      p_tier: "STD",
+    });
+    if (error) {
+      console.error(error);
+      toast.error("❌ Greška kod generiranja šifre");
+      return "";
     }
+    return data;
   };
 
-  // === Kad odaberemo tip popravka iz dropdowna ===
-  const handleCatalogChange = (id) => {
-    const c = catalog.find((x) => x.id === id);
-    setNewRepair((prev) => ({
-      ...prev,
-      repair_catalog_id: id,
-      description: c?.repair_name || "",
-      total_price: c?.base_price ?? "",
-    }));
-  };
-
-  // === Kreiranje novog popravka ===
+  // ➕ Novi popravak
   const handleCreateRepair = async (e) => {
     e.preventDefault();
-    const {
-      customer_name,
-      customer_email,
-      item_code,
-      repair_catalog_id,
-      description,
-      total_price,
-    } = newRepair;
 
-    if (!customer_name) return toast.error("❌ Unesite ime kupca");
-    if (!repair_catalog_id)
-      return toast.error("❌ Odaberite popravak iz kataloga");
+    const { customer_name, customer_email, description, total_price, repair_catalog_id, repair_no } = newRepair;
+    if (!customer_name || !repair_catalog_id) {
+      toast.error("❌ Unesite kupca i odaberite popravak");
+      return;
+    }
 
-    try {
-      const repair_code = await generateRepairCode();
+    let code = repair_no;
+    if (!code) {
+      code = await generateRepairCode();
+      if (!code) return;
+    }
 
-      const { error } = await supabase.from("repairs").insert([
-        {
-          repair_code,
-          repair_no: repair_code,
-          customer_name,
-          customer_email: customer_email || null,
-          item_code: item_code || null,
-          item_description: description,
-          total_price: total_price ? Number(total_price) : null,
-          status: "RECEIVED",
-          received_at: new Date().toISOString(),
-        },
-      ]);
+    const { error } = await supabase.from("repairs").insert([
+      {
+        repair_no: code,
+        customer_name,
+        customer_email: customer_email || null,
+        description,
+        total_price: total_price || 0,
+        status: "PENDING",
+      },
+    ]);
 
-      if (error) throw error;
-
+    if (error) {
+      toast.error("❌ Greška kod spremanja popravka");
+      console.error(error);
+    } else {
       toast.success("✅ Popravak dodan");
       setNewRepair({
+        repair_no: "",
         customer_name: "",
         customer_email: "",
-        item_code: "",
         repair_catalog_id: "",
         description: "",
         total_price: "",
       });
       fetchRepairs();
-    } catch (err) {
-      toast.error("❌ Greška kod spremanja popravka");
     }
   };
 
-  // === Promjena statusa ===
-  const handleStatusChange = async (id, newStatus) => {
+  // 🔁 Kad se odabere popravak iz kataloga
+  const handleCatalogChange = async (id) => {
+    const selected = catalog.find((c) => c.id === id);
+    if (!selected) return;
+
+    const code = await generateRepairCode();
+    if (code) {
+      setNewRepair((prev) => ({
+        ...prev,
+        repair_catalog_id: id,
+        repair_no: code,
+        description: selected.repair_name,
+        total_price: selected.gross_price.toFixed(2),
+      }));
+    }
+  };
+
+  // 🧠 Promjena statusa
+  const handleStatusChange = (id, newStatus) => {
     const repair = repairs.find((r) => r.id === id);
     if (!repair) return toast.error("❌ Popravak nije pronađen");
-
     if (newStatus === "READY") {
       setPendingRepair({ id, newStatus, repair });
       setShowMailConfirm(true);
-      return;
+    } else {
+      updateStatus(id, newStatus, false);
     }
-
-    await updateStatus(id, newStatus, false);
   };
 
-  // === Update statusa i eventualno slanje maila ===
+  // 📬 Update statusa i e-mail
   const updateStatus = async (id, newStatus, sendMail = false) => {
     try {
       const { data: repair, error } = await supabase
@@ -174,44 +167,36 @@ export default function Repairs({ addToCart }) {
         .eq("id", id)
         .select()
         .single();
-      if (error) throw error;
 
+      if (error) throw error;
       toast.success(`Status ažuriran: ${newStatus}`);
 
       if (sendMail && repair?.customer_email) {
         setSendingMail(true);
 
         const subject = "Vaš popravak je gotov!";
-        const cname = repair.customer_name || "kupče";
-        const desc =
-          repair.item_description || repair.description || repair.item_code;
-        const text = `Poštovani ${cname},\n\nVaš ${desc} je gotov i spreman za preuzimanje.\n\nHvala na povjerenju!\nZlatarna Križek`;
+        const text = `Poštovani ${repair.customer_name || "kupče"}, Vaš popravak "${repair.description}" je gotov i spreman za preuzimanje.`;
         const html = `
           <div style="font-family:sans-serif;color:#333;">
-            <h2>Poštovani ${cname},</h2>
-            <p>Vaš <strong>${desc}</strong> je gotov i spreman za preuzimanje.</p>
+            <h2>Poštovani ${repair.customer_name || "kupče"},</h2>
+            <p>Vaš popravak <strong>${repair.description}</strong> je gotov i spreman za preuzimanje.</p>
             <p>Hvala na povjerenju!<br><strong>Zlatarna Križek tim</strong></p>
-          </div>
-        `;
+          </div>`;
 
         const resp = await fetch("/api/sendMail", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: repair.customer_email,
-            subject,
-            text,
-            html,
-          }),
+          body: JSON.stringify({ to: repair.customer_email, subject, text, html }),
         });
 
         setSendingMail(false);
-
         if (resp.ok) {
           toast.success(`📧 Email poslan kupcu ${repair.customer_email}`);
           setShowSuccess(true);
           setTimeout(() => setShowSuccess(false), 2000);
-        } else toast.error("❌ Neuspješno slanje emaila.");
+        } else {
+          toast.error("❌ Neuspješno slanje emaila.");
+        }
       }
 
       fetchRepairs();
@@ -229,6 +214,7 @@ export default function Repairs({ addToCart }) {
     setPendingRepair(null);
   };
 
+  // 💰 Naplata
   const handleCharge = (repair) => {
     if (repair.status !== "READY") {
       toast.warning("Popravak još nije spreman za naplatu!");
@@ -236,41 +222,35 @@ export default function Repairs({ addToCart }) {
     }
 
     const cartItem = {
-      code: repair.repair_code || repair.repair_no,
-      name: `Popravak: ${repair.item_description || repair.description}`,
+      code: repair.repair_no,
+      name: `Popravak: ${repair.description}`,
       price: repair.total_price || 0,
       quantity: 1,
       type: "service",
     };
-
     addToCart(cartItem);
     toast.success(`✅ Dodano u košaricu: ${cartItem.name}`);
   };
-
-  const sortedRepairs = useMemo(() => (repairs || []).sort(sortRepairs), [repairs]);
 
   return (
     <div className="repairs-wrapper">
       <h3 className="repairs-header">🧰 Popravci</h3>
 
-      {/* ➕ Forma s dropdownom iz repair_catalog */}
+      {/* ➕ Novi popravak */}
       <form className="repair-form" onSubmit={handleCreateRepair}>
         <input
           type="text"
           placeholder="Kupac"
           value={newRepair.customer_name}
-          onChange={(e) =>
-            setNewRepair({ ...newRepair, customer_name: e.target.value })
-          }
+          onChange={(e) => setNewRepair({ ...newRepair, customer_name: e.target.value })}
         />
         <input
           type="email"
-          placeholder="Email (opcionalno)"
+          placeholder="Email"
           value={newRepair.customer_email}
-          onChange={(e) =>
-            setNewRepair({ ...newRepair, customer_email: e.target.value })
-          }
+          onChange={(e) => setNewRepair({ ...newRepair, customer_email: e.target.value })}
         />
+        <input type="text" placeholder="Šifra popravka" value={newRepair.repair_no} readOnly />
         <select
           value={newRepair.repair_catalog_id}
           onChange={(e) => handleCatalogChange(e.target.value)}
@@ -278,23 +258,16 @@ export default function Repairs({ addToCart }) {
           <option value="">— Odaberi popravak —</option>
           {catalog.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.repair_name} ({c.base_price} €)
+              {c.repair_name} ({c.gross_price.toFixed(2)} €)
             </option>
           ))}
         </select>
-        <input
-          type="text"
-          placeholder="Opis (auto)"
-          value={newRepair.description}
-          readOnly
-        />
+        <input type="text" placeholder="Opis" value={newRepair.description} readOnly />
         <input
           type="number"
           placeholder="Cijena (€)"
           value={newRepair.total_price}
-          onChange={(e) =>
-            setNewRepair({ ...newRepair, total_price: e.target.value })
-          }
+          onChange={(e) => setNewRepair({ ...newRepair, total_price: e.target.value })}
         />
         <button type="submit">💾 Spremi</button>
       </form>
@@ -303,7 +276,7 @@ export default function Repairs({ addToCart }) {
       <div className="repairs-list">
         {loading ? (
           <p>Učitavam...</p>
-        ) : sortedRepairs.length === 0 ? (
+        ) : repairs.length === 0 ? (
           <p>Nema evidentiranih popravaka.</p>
         ) : (
           <table className="styled-table">
@@ -318,24 +291,18 @@ export default function Repairs({ addToCart }) {
               </tr>
             </thead>
             <tbody>
-              {sortedRepairs.map((r) => (
+              {repairs.map((r) => (
                 <tr key={r.id}>
-                  <td>{r.repair_code || r.repair_no}</td>
+                  <td>{r.repair_no}</td>
                   <td>{r.customer_name}</td>
-                  <td>{r.item_description || r.description}</td>
+                  <td>{r.description}</td>
                   <td>{r.status}</td>
                   <td>{(r.total_price || 0).toFixed(2)} €</td>
                   <td>
-                    <button
-                      className="ready-btn"
-                      onClick={() => handleStatusChange(r.id, "READY")}
-                    >
+                    <button className="ready-btn" onClick={() => handleStatusChange(r.id, "READY")}>
                       ✅ Završeno
                     </button>
-                    <button
-                      className="charge-btn"
-                      onClick={() => handleCharge(r)}
-                    >
+                    <button className="charge-btn" onClick={() => handleCharge(r)}>
                       💰 Naplati
                     </button>
                   </td>
@@ -346,7 +313,7 @@ export default function Repairs({ addToCart }) {
         )}
       </div>
 
-      {/* 📧 Modal potvrde e-maila */}
+      {/* 📧 Modal */}
       {showMailConfirm && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -354,13 +321,9 @@ export default function Repairs({ addToCart }) {
             <p>
               Kupac: <strong>{pendingRepair?.repair.customer_name}</strong>
               <br />
-              Email: <strong>{pendingRepair?.repair.customer_email || "—"}</strong>
+              Email: <strong>{pendingRepair?.repair.customer_email}</strong>
               <br />
-              Popravak:{" "}
-              <em>
-                {pendingRepair?.repair.item_description ||
-                  pendingRepair?.repair.description}
-              </em>
+              Popravak: <em>{pendingRepair?.repair.description}</em>
             </p>
             <div className="modal-actions">
               <button onClick={() => confirmSendMail(true)}>✅ Pošalji e-mail</button>
@@ -370,7 +333,6 @@ export default function Repairs({ addToCart }) {
         </div>
       )}
 
-      {/* 🌀 Loader overlay */}
       {sendingMail && (
         <div className="mail-loader-overlay">
           <div className="mail-loader">
@@ -380,7 +342,6 @@ export default function Repairs({ addToCart }) {
         </div>
       )}
 
-      {/* ✅ Success overlay */}
       {showSuccess && (
         <div className="mail-success-overlay">
           <div className="mail-success">

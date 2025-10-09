@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  overflow: hidden; /* sprječava globalni scroll */
 }
 
 .repairs-header {
@@ -10,8 +10,43 @@
   border-bottom: 1px solid #ddd;
   padding: 10px 16px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
+/* Forma za novi popravak */
+.repair-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+}
+
+.repair-form input,
+.repair-form select {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.repair-form button {
+  background-color: #0a1f44;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 6px 10px;
+  transition: opacity 0.2s;
+}
+
+.repair-form button:hover {
+  opacity: 0.85;
+}
+
+/* ✅ Samo lista ima scroll */
 .repairs-list {
   flex: 1;
   overflow-y: auto;
@@ -19,9 +54,11 @@
   max-height: 70vh;
 }
 
+/* Tabela */
 .styled-table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 14px;
 }
 
 .styled-table th {
@@ -37,8 +74,10 @@
 .styled-table td {
   border-top: 1px solid #eee;
   padding: 8px;
+  vertical-align: middle;
 }
 
+/* Gumbi */
 .ready-btn,
 .charge-btn {
   margin-right: 6px;
@@ -50,23 +89,25 @@
   transition: opacity 0.2s;
 }
 
+.ready-btn {
+  background-color: #0a7d29;
+}
+.charge-btn {
+  background-color: #0a1f44;
+}
+
 .ready-btn:hover,
 .charge-btn:hover {
   opacity: 0.85;
 }
 
-.ready-btn {
-  background-color: #0a7d29;
-}
-
-.charge-btn {
-  background-color: #0a1f44;
-}
-
-/* 📧 Modal styling */
+/* Modal */
 .modal-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
@@ -94,7 +135,6 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease-in-out;
 }
 
 .modal-actions button:first-child {
@@ -107,100 +147,48 @@
   color: white;
 }
 
-.modal-actions button:hover {
-  transform: scale(1.05);
-}
-
-/* 🌀 Loader overlay */
-.mail-loader-overlay {
+/* Loader i success overlay */
+.mail-loader-overlay,
+.mail-success-overlay {
   position: fixed;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(6px);
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.8);
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   z-index: 2000;
 }
 
-.mail-loader {
-  background: linear-gradient(145deg, #ffffff, #f3f6fa);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15);
-  padding: 26px 36px;
+.mail-loader,
+.mail-success {
+  background: white;
+  padding: 24px 40px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
   text-align: center;
-  color: #0a1f44;
 }
 
 .spinner {
-  width: 46px;
-  height: 46px;
-  margin: 0 auto 14px;
-  border: 4px solid #d3d8e1;
-  border-top: 4px solid #0070f3;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #ccc;
+  border-top: 3px solid #0a1f44;
   border-radius: 50%;
-  animation: spin 1s linear infinite, pulse 2s ease-in-out infinite;
+  animation: spin 0.9s linear infinite;
+  margin: 0 auto 10px;
 }
 
-.mail-loader p {
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  margin: 0;
-  color: #0a1f44;
-}
-
-/* ✅ Success overlay */
-.mail-success-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(6px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 2100;
-}
-
-.mail-success {
-  background: linear-gradient(145deg, #e7fff0, #ffffff);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 14px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15);
-  padding: 26px 36px;
-  text-align: center;
-  color: #0a7d29;
-  animation: fadeIn 0.3s ease, scaleIn 0.3s ease;
-}
-
-.mail-success .checkmark {
-  font-size: 46px;
-  color: #0a7d29;
-  margin-bottom: 10px;
-}
-
-.mail-success p {
-  font-size: 16px;
-  font-weight: 500;
-  margin: 0;
-}
-
-/* Animacije */
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 112, 243, 0.2); }
-  50% { box-shadow: 0 0 0 6px rgba(0, 112, 243, 0.05); }
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes scaleIn {
-  from { transform: scale(0.9); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+
+.checkmark {
+  font-size: 36px;
+  color: #0a7d29;
+  margin-bottom: 8px;
 }
