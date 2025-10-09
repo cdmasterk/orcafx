@@ -1,0 +1,66 @@
+.tiers-container {
+  padding: 24px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.tiers-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+.tiers-table th,
+.tiers-table td {
+  border-bottom: 1px solid #eaeaea;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.tiers-table input[type="text"],
+.tiers-table input[type="number"] {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.btn-save {
+  background: #0a1f44;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.btn-save:hover {
+  background: #122c6b;
+}
+
+.new-tier-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.new-tier-form input {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.btn-add {
+  background: #0a1f44;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.btn-add:hover {
+  background: #122c6b;
+}

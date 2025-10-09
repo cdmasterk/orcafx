@@ -1,23 +1,15 @@
 #!/usr/bin/env node
 import fs from "fs";
-import { execSync } from "child_process";
 
-// --- Config ---
 const GH_TOKEN = process.env.GH_TOKEN;
 const GH_OWNER = "cdmasterk";     // tvoj username
 const GH_OWNER_TYPE = "user";
 const GH_PROJECT_NUMBER = 6;
 const PLAN_FILE = "docs/ORCAFX_CORE_PLAN.md";
 
-// --- Auto-detect repo name ---
-let GH_REPO = "orcafx"; // fallback
-try {
-  const remoteUrl = execSync("git config --get remote.origin.url").toString().trim();
-  const match = remoteUrl.match(/github\.com[:/][^/]+\/(.+?)(\.git)?$/);
-  if (match) GH_REPO = match[1];
-} catch (err) {
-  console.warn("⚠️ Cannot detect repo from git remote, using fallback:", GH_REPO);
-}
+// --- Hardcode repo ime da nema dileme ---
+const GH_REPO = "orcafx";
+console.log("🐙 Using repo:", GH_OWNER, GH_REPO);
 
 // --- GraphQL helper ---
 async function ghGraphQL(query, variables) {
@@ -72,7 +64,11 @@ async function pushPlan() {
     }
   `;
   const repoData = await ghGraphQL(repoQ, { owner: GH_OWNER, name: GH_REPO });
-  if (!repoData.repository) throw new Error("Repo not found");
+
+  // 🐞 Debug ispis cijelog odgovora
+  console.log("📡 Raw repo query response:", JSON.stringify(repoData, null, 2));
+
+  if (!repoData || !repoData.repository) throw new Error("❌ Repo not found (check PAT permissions)");
   const repoId = repoData.repository.id;
   const existingIssues = repoData.repository.issues.nodes;
 
@@ -99,7 +95,7 @@ async function pushPlan() {
   `;
   const pdata = await ghGraphQL(projectQ, { login: GH_OWNER, number: GH_PROJECT_NUMBER });
   const project = pdata?.[GH_OWNER_TYPE]?.projectV2;
-  if (!project) throw new Error("Project not found");
+  if (!project) throw new Error("❌ Project not found");
   const statusField = project.fields.nodes.find(f => f.name === "Status");
 
   console.log(`✅ Found project: ${project.title}`);
@@ -192,7 +188,7 @@ async function pullPlan() {
   `;
   const pdata = await ghGraphQL(projectQ, { login: GH_OWNER, number: GH_PROJECT_NUMBER });
   const project = pdata?.[GH_OWNER_TYPE]?.projectV2;
-  if (!project) throw new Error("Project not found");
+  if (!project) throw new Error("❌ Project not found");
 
   let md = `# ORCAFX Core Plan\n\n`;
   let currentPhase = "";

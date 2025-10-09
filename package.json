@@ -8,9 +8,11 @@
   "dependencies": {
     "@react-pdf/renderer": "^3.4.3",
     "@supabase/supabase-js": "^2.43.4",
+    "dotenv": "^17.2.3",
     "file-saver": "^2.0.5",
     "jspdf": "^3.0.3",
     "jspdf-autotable": "^5.0.2",
+    "nodemailer": "^7.0.9",
     "pako": "^1.0.11",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",

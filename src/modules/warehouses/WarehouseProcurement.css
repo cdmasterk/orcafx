@@ -1,0 +1,158 @@
+.procurement-container {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.procurement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn {
+  background: #0a1f44;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn:hover {
+  background: #1d3e8a;
+}
+
+.btn-template {
+  background: #1a73e8;
+}
+
+.btn-import {
+  background: #28a745;
+}
+
+.file-upload {
+  background: #f3f3f3;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.file-upload:hover {
+  background: #e9e9e9;
+}
+
+.import-errors {
+  background: #ffe9e9;
+  border: 1px solid #ffbcbc;
+  color: #a10000;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.import-errors ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 16px;
+  font-size: 0.9rem;
+}
+
+.preview-table th,
+.preview-table td {
+  border: 1px solid #ddd;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.preview-table th {
+  background: #f5f7fb;
+  font-weight: 600;
+  color: #0a1f44;
+}
+/* ============================== */
+/* 🧾 MANUAL ENTRY FORM (responsive grid) */
+/* ============================== */
+.manual-entry {
+  background: #fff;
+  padding: 16px;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.manual-entry h4 {
+  margin-bottom: 10px;
+  color: #0a1f44;
+  font-weight: 600;
+}
+
+.manual-entry form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.manual-entry input {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background-color: #fff;
+  transition: border 0.2s, box-shadow 0.2s;
+}
+
+.manual-entry input:focus {
+  outline: none;
+  border-color: #0a1f44;
+  box-shadow: 0 0 0 1px #0a1f44;
+}
+
+.manual-entry button {
+  background: #0a1f44;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.manual-entry button:hover {
+  background: #122c6b;
+}
+
+/* ============================== */
+/* 📱 RESPONSIVE OPTIMIZACIJA */
+/* ============================== */
+@media (max-width: 1200px) {
+  .manual-entry form {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .manual-entry form {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .manual-entry form {
+    grid-template-columns: 1fr;
+  }
+}

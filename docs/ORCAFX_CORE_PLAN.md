@@ -1,61 +1,86 @@
-# 🐋 OrcaFX – Core Blueprint & Modular Plan
+# ORCAFX — Core Plan
 
-OrcaFX je ERP nove generacije – kombinira **ERP + Trading Terminal + AI Copilot**.  
-Cilj je imati sustav koji je **lagan za korištenje**, a dovoljno moćan da sam daje smjernice za poslovanje.
+## MVP — 🖥️ Sales (POS & Web POS)
+- [ ] Dodati fiskalizaciju (API za Hrvatsku)
+- [ ] Dinamične cijene (integracija metal prices €/g u artikle)
+- [ ] Računi: print/export PDF + automatsko spremanje u Supabase
+- [ ] UX: brzi prečaci (tipkovnica, barcode)
 
----
+## MVP — 🔧 Service
+- [ ] Dodati statuse servisa (zaprimljen, u obradi, završen, naplaćen)
+- [ ] Automatsko slanje u POS Cart kod naplate
+- [ ] Izvještaj: lista aktivnih servisa + filtriranje po statusu
 
-## 🌍 Modularna arhitektura
+## MVP — 💰 Buyback
+- [ ] Povezati otkupnu cijenu s metal prices API (Au 24k, Ag 999)
+- [ ] Automatski izračun otkupne cijene po gramu/čistoći
+- [ ] Izdavanje računa otkupa (dokument)
 
-### 1. Core poslovni moduli
-- **🖥️ Sales (POS & Web POS)** – blagajna u poslovnicama i webshopu, povezana sa zalihama i fiskalizacijom  
-- **🔧 Service** – popravci nakita, jamstva  
-- **💰 Buyback** – otkup zlata i srebra, automatski izračuni  
-- **📑 Custom Orders** – narudžbe po mjeri, praćenje izrade  
-- **📦 Inventory & Supply Chain** – skladišta, FIFO/LIFO, automatske narudžbe  
-- **💳 Finance & Invoicing** – računi, fiskalizacija, bankovni izvodi  
+## MVP — 📦 Inventory & Supply Chain
+- [ ] Evidencija centralnog skladišta
+- [ ] Evidencija poslovnica (VG, Dubrovnik, webshop)
+- [ ] Transfer robe (iz centralnog u poslovnicu)
+- [ ] Povrat robe (iz poslovnice u centralno)
+- [ ] Automatsko smanjenje stocka kroz POS prodaju i storno vraćanje
 
----
+## MVP — 💳 Finance & Invoicing
+- [ ] Export računa za knjigovodstvo (Excel/PDF)
+- [ ] Import bank izvadaka (CSV, MT940) → povezivanje uplata s računima
+- [ ] Dashboard: graf prihoda/troškova
 
-### 2. Advanced Business moduli
-- **⚒️ Production / Manufacturing** – planiranje izrade, AI predikcija materijala, CAD integracija  
-- **👥 HR & Workforce** – smjene, satnica, obračun plaća, AI analiza produktivnosti  
-- **🤝 CRM & Loyalty** – kupci, loyalty program, AI preporuke  
-- **📈 Reports & Analytics** – izvještaji, sezonalni trendovi, prediktivna analitika  
-
----
-
-### 3. Integration Layer
-- **🏦 Banking & Payments** – povezivanje s bankama, automatsko knjiženje  
-- **🌍 E-commerce Bridge** – sinkronizacija s webshopom (Wix, Shopify, WooCommerce)  
-- **📜 Government & Compliance** – fiskalizacija, porezni izvještaji, ISO  
-
----
-
-### 4. AI Copilot sloj
-ERP koji **ne samo da prati, nego i savjetuje korisnika**:  
-- **🤖 Predictive Analytics** – predviđa prodaju, kretanje cijena  
-- **🧠 Business Coach** – dnevne smjernice u dashboardu  
-- **�� Natural Language Queries** – korisnik pita prirodnim jezikom → sustav odgovara  
+## MVP — 📑 Custom Orders
+- [ ] Forma za unos narudžbi (materijal, model, opis)
+- [ ] Statusi: zaprimljeno, u izradi, gotovo, isporučeno
+- [ ] Veza sa skladištem i proizvodnjom
 
 ---
 
-## 🛡️ RBAC (Role-Based Access Control)
-- **Admin** → puni pristup svim modulima  
-- **Manager** → Sales + Reports + Settings  
-- **Administrative** → Sales + Service + Buyback + Custom Orders  
-- **Sales/Service** → samo POS + Service + Buyback  
+## Phase 2 — ⚒️ Production / Manufacturing
+- [ ] Workflow proizvodnje (planiranje, radni nalozi)
+- [ ] Veza sa stockom (materijali, output proizvodi)
+
+## Phase 2 — 👥 HR & Workforce
+- [ ] Evidencija zaposlenika
+- [ ] Radno vrijeme i smjene
+- [ ] Obračun plaća (osnovno)
+
+## Phase 2 — 🤝 CRM & Loyalty
+- [ ] Baza kupaca
+- [ ] Loyalty program (bodovi, popusti)
+
+## Phase 2 — 📈 Reports & Analytics
+- [ ] Izvještaji prodaje
+- [ ] Trendovi otkupa
+- [ ] Analiza servisa
 
 ---
 
-## 📌 Roadmap
-1. **MVP** – Sales, Service, Buyback, Dashboard (AI Advisor basic)  
-2. **Phase 2** – Inventory + Finance + Reports  
-3. **Phase 3** – Production + HR + CRM  
-4. **Phase 4** – AI Copilot (full) + RBAC + integracije  
+## Phase 3 — 🏦 Banking & Payments
+- [ ] Integracija s bankovnim API
+- [ ] Kartično plaćanje (POS terminal API)
+
+## Phase 3 — 🌍 E-commerce Bridge
+- [ ] Sinkronizacija webshop artikala
+- [ ] Automatsko povlačenje narudžbi
+
+## Phase 3 — 📜 Government & Compliance
+- [ ] Fiskalizacija (ako nije dovršeno u MVP)
+- [ ] Porezni izvještaji
 
 ---
 
-✨ **OrcaFX ≠ klasični ERP** → to je **ERP + Trading Terminal + AI Copilot**.  
-Lagano za korištenje, a moćno kao Bloomberg + SAP u kombinaciji.  
+## Phase 4 — 🤖 Predictive Analytics
+- [ ] Predikcija cijena metala
+- [ ] Predikcija prodaje
 
+## Phase 4 — 🧠 Business Coach
+- [ ] AI preporuke za upravljanje zalihama i financijama
+
+## Phase 4 — 🗨️ Natural Language Queries
+- [ ] Pitanja tipa "Koliko smo prodali prošli mjesec?" → AI upit prema DB
+
+## Phase 4 — Roles (RBAC)
+- [ ] Admin — sve
+- [ ] Manager — Settings + izvještaji
+- [ ] Administrative — ograničeni pristup
+- [ ] Sales/Service — samo prodaja i servisi

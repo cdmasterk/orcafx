@@ -1,0 +1,48 @@
+.warehouse-dashboard {
+  padding: 32px;
+}
+
+.warehouse-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #0a1f44;
+  margin-bottom: 6px;
+}
+
+.warehouse-subtitle {
+  font-size: 1rem;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+.warehouse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.warehouse-card {
+  background: #f8faff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.warehouse-card:hover {
+  background: #e9f1ff;
+  transform: translateY(-2px);
+}
+
+.warehouse-card h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #0a1f44;
+  margin-bottom: 6px;
+}
+
+.warehouse-card p {
+  font-size: 0.9rem;
+  color: #555;
+}

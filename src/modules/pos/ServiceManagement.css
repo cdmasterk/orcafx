@@ -1,0 +1,35 @@
+.service-management {
+  padding: 20px;
+}
+
+.filters {
+  margin-bottom: 10px;
+}
+
+.filters select {
+  margin-left: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.styled-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.styled-table th, .styled-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+
+.styled-table th {
+  background: #f8f9fb;
+  color: #0a1f44;
+  font-weight: 600;
+}
+
+.styled-table tr:hover {
+  background: #f4f7ff;
+}

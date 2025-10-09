@@ -1,25 +1,41 @@
-name: Sync OrcaFX Plan to GitHub Project
+name: Sync ORCAFX Plan
 
 on:
   push:
+    branches: [ "main" ]
     paths:
-      - 'docs/ORCAFX_CORE_PLAN.md'
-  workflow_dispatch: {}
+      - "docs/ORCAFX_CORE_PLAN.md"
+      - "scripts/syncPlanToGitHub.mjs"
+  schedule:
+    - cron: "0 6 * * *"   # svaki dan u 06:00 UTC (08:00 CET)
 
 jobs:
-  sync:
+  push-plan:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      - name: Run sync script
+          node-version: 20
+      - run: node scripts/syncPlanToGitHub.mjs --push
         env:
-          GH_TOKEN: ${{ secrets.ORCA_GH_TOKEN }}   # koristi secret
-          GH_OWNER: cdmasterk                  # ⬅️ promijeni u svoj GitHub username
-          GH_OWNER_TYPE: user                      # ili 'org' ako je projekt pod organizacijom
-          GH_PROJECT_NUMBER: '6'                   # ⬅️ broj iz URL-a projekta
-        run: node scripts/syncPlanToGitHub.mjs
+          GH_TOKEN: ${{ secrets.ORCA_GH_TOKEN }}
+
+  pull-plan:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: |
+          node scripts/syncPlanToGitHub.mjs --pull
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/ORCAFX_CORE_PLAN.md
+          git commit -m "ci: sync plan from GitHub Project"
+          git push
+        env:
+          GH_TOKEN: ${{ secrets.ORCA_GH_TOKEN }}

@@ -4,14 +4,14 @@ import ServiceList from "./ServiceList";
 import Cart from "./Cart";
 import Invoices from "./Invoices";
 import Receipt from "./Receipt";
+import Repairs from "./Repairs";
+import ServiceManagement from "./ServiceManagement";
 import { useReactToPrint } from "react-to-print";
 import { supabase } from "../../supabaseClient";
 import { toast } from "react-toastify";
 import "./POS.css";
 
-// helper: dohvat ili otvaranje aktivne smjene
 async function getOrCreateSession(posId, cashierId) {
-  // provjeri postoji li otvorena smjena za korisnika
   const { data: existing, error: fetchErr } = await supabase
     .from("cash_sessions")
     .select("*")
@@ -23,7 +23,6 @@ async function getOrCreateSession(posId, cashierId) {
   if (fetchErr) throw fetchErr;
   if (existing && existing.length > 0) return existing[0];
 
-  // ako nema, otvori novu
   const { data: session, error: insertErr } = await supabase
     .from("cash_sessions")
     .insert({
@@ -31,7 +30,7 @@ async function getOrCreateSession(posId, cashierId) {
       cashier_id: cashierId,
       opened_by: cashierId,
       status: "OPEN",
-      initial_float: 0
+      initial_float: 0,
     })
     .select()
     .single();
@@ -49,33 +48,29 @@ export default function POS() {
   const [lastInvoice, setLastInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // auth user + aktivna smjena
   const [user, setUser] = useState(null);
   const [activeSession, setActiveSession] = useState(null);
 
-  // modal za plaćanje
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [cardType, setCardType] = useState(null);
 
-  // podaci za ispis
   const [printedInvoice, setPrintedInvoice] = useState(null);
   const [printItems, setPrintItems] = useState([]);
 
-  // ref za receipt print
   const componentRef = useRef();
   const handlePrint = useReactToPrint({
     content: () => componentRef.current,
   });
 
-  // auto print kad invoice spreman
+  // auto print
   useEffect(() => {
     if (printedInvoice && printItems.length > 0) {
       handlePrint();
     }
   }, [printedInvoice, printItems, handlePrint]);
 
-  // auth user i aktivna smjena
+  // auth + session
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       if (data?.user) {
@@ -91,20 +86,26 @@ export default function POS() {
     });
   }, []);
 
-  // dohvaćanje itema
+  // fetch items
   const fetchItems = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("items")
-      .select("id, code, name, price, stock, type")
+      .select("id, code, name, price_nc, price_vp, price_mp, stock, type, warehouse_id")
       .order("code");
 
     if (error) {
       console.error(error);
       toast.error("Greška kod dohvaćanja artikala: " + error.message);
     } else {
-      setProducts((data || []).filter((i) => i.type === "PRODUCT"));
-      setServices((data || []).filter((i) => i.type === "SERVICE"));
+      const normalized = (data || []).map((i) => ({
+        ...i,
+        price: Number(i.price_mp ?? i.price_vp ?? i.price_nc ?? 0),
+        type: (i.type || "").toLowerCase(),
+      }));
+
+      setProducts(normalized.filter((i) => i.type === "product"));
+      setServices(normalized.filter((i) => i.type === "service"));
     }
     setLoading(false);
   };
@@ -113,11 +114,11 @@ export default function POS() {
     fetchItems();
   }, []);
 
-  // dodavanje u košaricu
+  // Cart
   const addToCart = (item) => {
     const existing = cart.find((c) => c.code === item.code);
     if (existing) {
-      if (item.type === "PRODUCT") {
+      if (item.type === "product") {
         if (existing.quantity + 1 > (item.stock || 0)) {
           toast.warning("Nema dovoljno na skladištu!");
           return;
@@ -138,14 +139,10 @@ export default function POS() {
   };
 
   const updateQuantity = (code, quantity) => {
-    setCart(
-      cart.map((c) =>
-        c.code === code ? { ...c, quantity } : c
-      )
-    );
+    setCart(cart.map((c) => (c.code === code ? { ...c, quantity } : c)));
   };
 
-  // checkout pokreće modal za odabir plaćanja
+  // Checkout
   const handleCheckout = () => {
     if (!cart.length) {
       toast.warning("Košarica je prazna.");
@@ -154,7 +151,6 @@ export default function POS() {
     setShowPaymentModal(true);
   };
 
-  // potvrda plaćanja
   const confirmPayment = async () => {
     if (!user || !activeSession) {
       toast.error("Nema aktivne smjene ili korisnika.");
@@ -182,13 +178,15 @@ export default function POS() {
         quantity: i.quantity,
         price: i.price,
       }));
+
       const { error: itemsErr } = await supabase
         .from("invoice_items")
         .insert(items);
       if (itemsErr) throw itemsErr;
 
+      // stock update
       for (const item of cart) {
-        if (item.type === "PRODUCT") {
+        if (item.type === "product") {
           const { error } = await supabase.rpc("decrement_stock", {
             p_code: item.code,
             p_quantity: item.quantity,
@@ -201,7 +199,6 @@ export default function POS() {
       toast.success(`Račun ${invoice.invoice_no || invoice.id} izdan!`);
       fetchItems();
 
-      // pripremi za ispis
       setPrintedInvoice({
         ...invoice,
         total,
@@ -218,7 +215,6 @@ export default function POS() {
     }
   };
 
-  // storno zadnjeg računa
   const handleStorno = async () => {
     if (!lastInvoice) {
       toast.warning("Nema računa za stornirati.");
@@ -239,9 +235,47 @@ export default function POS() {
     }
   };
 
+  // 📨 Email Notification when repair status READY
+  useEffect(() => {
+    const repairListener = supabase
+      .channel("repair-status-listener")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "repairs",
+          filter: "status=eq.READY",
+        },
+        async (payload) => {
+          const r = payload.new;
+          if (r?.customer_email) {
+            const text = `Poštovani ${r.customer_name},\n\nVaš popravak (${r.repair_no}) je završen i spreman za preuzimanje u poslovnici ${r.warehouse_id || "odabranoj"}.\n\nHvala što ste koristili naše usluge.\n\nZlatarna Križek`;
+            await fetch("/api/sendMail", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                to: r.customer_email,
+                subject: `Popravak ${r.repair_no} spreman za preuzimanje`,
+                text,
+              }),
+            });
+            toast.info(`📧 Email poslan kupcu ${r.customer_name}`);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(repairListener);
+    };
+  }, []);
+
+  // ===============================
+  // 🖥️ Render
+  // ===============================
   return (
     <div className="pos">
-      {/* Hidden receipt for print */}
       <div style={{ display: "none" }}>
         {printedInvoice && (
           <Receipt
@@ -270,39 +304,26 @@ export default function POS() {
 
             {paymentMethod === "CARD" && (
               <div className="sub-options">
-                <label>
-                  <input
-                    type="radio"
-                    name="cardType"
-                    value="VISA"
-                    checked={cardType === "VISA"}
-                    onChange={(e) => setCardType(e.target.value)}
-                  /> Visa
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="cardType"
-                    value="MC"
-                    checked={cardType === "MC"}
-                    onChange={(e) => setCardType(e.target.value)}
-                  /> Mastercard
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="cardType"
-                    value="AMEX"
-                    checked={cardType === "AMEX"}
-                    onChange={(e) => setCardType(e.target.value)}
-                  /> Amex
-                </label>
+                {["VISA", "MC", "AMEX"].map((type) => (
+                  <label key={type}>
+                    <input
+                      type="radio"
+                      name="cardType"
+                      value={type}
+                      checked={cardType === type}
+                      onChange={(e) => setCardType(e.target.value)}
+                    />{" "}
+                    {type}
+                  </label>
+                ))}
               </div>
             )}
 
             <div className="modal-actions">
               <button onClick={confirmPayment}>Potvrdi</button>
-              <button onClick={() => setShowPaymentModal(false)}>Odustani</button>
+              <button onClick={() => setShowPaymentModal(false)}>
+                Odustani
+              </button>
             </div>
           </div>
         </div>
@@ -310,46 +331,29 @@ export default function POS() {
 
       {/* Tabs */}
       <div className="pos-tabs">
-        <button
-          className={activeTab === "sales" ? "active" : ""}
-          onClick={() => setActiveTab("sales")}
-        >
-          Prodaja
-        </button>
-        <button
-          className={activeTab === "invoices" ? "active" : ""}
-          onClick={() => setActiveTab("invoices")}
-        >
-          Računi
-        </button>
+        <button className={activeTab === "sales" ? "active" : ""} onClick={() => setActiveTab("sales")}>Prodaja</button>
+        <button className={activeTab === "invoices" ? "active" : ""} onClick={() => setActiveTab("invoices")}>Računi</button>
+        <button className={activeTab === "service" ? "active" : ""} onClick={() => setActiveTab("service")}>Service Management</button>
       </div>
 
-      {/* Content */}
       <div className="pos-content">
         {activeTab === "sales" && (
           <div className="pos-grid">
             <div className="pos-products">
               <div className="pos-subtabs">
-                <button
-                  className={activeSubTab === "products" ? "active" : ""}
-                  onClick={() => setActiveSubTab("products")}
-                >
-                  📦 Proizvodi
-                </button>
-                <button
-                  className={activeSubTab === "services" ? "active" : ""}
-                  onClick={() => setActiveSubTab("services")}
-                >
-                  🔧 Usluge
-                </button>
+                <button className={activeSubTab === "products" ? "active" : ""} onClick={() => setActiveSubTab("products")}>📦 Proizvodi</button>
+                <button className={activeSubTab === "services" ? "active" : ""} onClick={() => setActiveSubTab("services")}>🔧 Usluge</button>
+                <button className={activeSubTab === "repairs" ? "active" : ""} onClick={() => setActiveSubTab("repairs")}>🧰 Popravci</button>
               </div>
 
               {loading ? (
                 <p>Učitavam...</p>
               ) : activeSubTab === "products" ? (
                 <ProductList products={products} onAdd={addToCart} />
-              ) : (
+              ) : activeSubTab === "services" ? (
                 <ServiceList services={services} onAdd={addToCart} />
+              ) : (
+                <Repairs addToCart={addToCart} />
               )}
             </div>
 
@@ -365,7 +369,9 @@ export default function POS() {
             </div>
           </div>
         )}
+
         {activeTab === "invoices" && <Invoices onRefresh={fetchItems} />}
+        {activeTab === "service" && <ServiceManagement />}
       </div>
     </div>
   );

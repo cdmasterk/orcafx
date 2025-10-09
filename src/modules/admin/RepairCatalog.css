@@ -1,0 +1,86 @@
+.repair-catalog {
+  padding: 20px;
+  font-family: "Inter", sans-serif;
+}
+
+.repair-form,
+.mass-update {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.repair-form input,
+.mass-update input {
+  padding: 6px 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background-color: #fff;
+  font-size: 0.95rem;
+}
+
+.repair-form button,
+.mass-update button {
+  background: #e3f2fd; /* svijetlo plava pozadina */
+  color: #0d47a1; /* tamno plava boja teksta */
+  border: 1px solid #bbdefb;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
+}
+
+.repair-form button:hover,
+.mass-update button:hover {
+  background: #bbdefb; /* lagano tamnija pri hoveru */
+}
+
+.styled-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  background-color: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.styled-table th,
+.styled-table td {
+  border: 1px solid #e2e8f0;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+.styled-table th {
+  background-color: #f5f7fa; /* svjetla zaglavlja */
+  color: #2b2b2b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.styled-table tr:nth-child(even) {
+  background-color: #fafafa;
+}
+
+.styled-table tr:hover {
+  background-color: #f1f9ff;
+}
+
+.styled-table td button {
+  background: #fefefe;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  color: #d32f2f;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: 0.2s;
+}
+
+.styled-table td button:hover {
+  background: #ffebee;
+}

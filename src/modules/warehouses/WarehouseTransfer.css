@@ -1,0 +1,138 @@
+/* === WAREHOUSE TRANSFER === */
+
+.transfer-container {
+  background: #fff;
+  padding: 24px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  margin-top: 20px;
+}
+
+.transfer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.transfer-header h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: #0A6ED1;
+}
+
+.transfer-header p {
+  font-size: 14px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.transfer-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.transfer-form select,
+.transfer-form input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+  transition: border 0.2s, box-shadow 0.2s;
+}
+
+.transfer-form select:focus,
+.transfer-form input:focus {
+  border-color: #0A6ED1;
+  box-shadow: 0 0 0 2px rgba(10, 110, 209, 0.2);
+  outline: none;
+}
+
+.btn-transfer {
+  background: #0A6ED1;
+  color: #fff;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-transfer:hover {
+  background: #084d94;
+  transform: translateY(-1px);
+}
+
+.btn-transfer:disabled {
+  background: #9cbce7;
+  cursor: not-allowed;
+}
+
+/* === TABLE === */
+
+.transfer-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.transfer-table th {
+  background: #f1f5f9;
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  color: #0a1f44;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.transfer-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 14px;
+  color: #333;
+}
+
+.transfer-table select,
+.transfer-table input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.transfer-table select:focus,
+.transfer-table input:focus {
+  border-color: #0A6ED1;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(10, 110, 209, 0.15);
+}
+
+/* === ADD ROW BUTTON === */
+
+.btn-add-row {
+  margin-top: 12px;
+  background: #f1f5f9;
+  color: #0A6ED1;
+  border: 1px solid #d0e1f5;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-add-row:hover {
+  background: #0A6ED1;
+  color: #fff;
+}

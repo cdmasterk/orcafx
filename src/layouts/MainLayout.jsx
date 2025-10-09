@@ -14,6 +14,7 @@ export default function MainLayout({ children }) {
             <nav>
               <Link to="/pos">💳 POS</Link>
               <Link to="/dashboard">📊 Dashboard</Link>
+              <Link to="/warehouses/dashboard">🏭 Skladište</Link> {/* ✅ NOVI LINK */}
               <Link to="/buyback">🔄 Otkup</Link>
               <Link to="/custom-orders">📐 Custom narudžbe</Link>
             </nav>

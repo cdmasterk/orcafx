@@ -1,0 +1,156 @@
+.company-settings-container {
+  background: #ffffff;
+  padding: 32px;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.company-settings-title {
+  font-size: 24px;
+  color: #0a6ed1;
+  font-weight: 700;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.company-settings-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.company-card {
+  background: #f9fafc;
+  border: 1px solid #e3e7ed;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.company-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0a1f44;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #e5e9f0;
+  padding-bottom: 6px;
+}
+
+.company-field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+
+.company-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0a1f44;
+  margin-bottom: 4px;
+}
+
+.company-field input,
+.company-field textarea {
+  padding: 8px 10px;
+  border: 1px solid #cfd4dc;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.company-field input:focus,
+.company-field textarea:focus {
+  border-color: #0a6ed1;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(10, 110, 209, 0.15);
+}
+
+.company-field textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.company-save {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.company-save button {
+  padding: 10px 20px;
+  background: linear-gradient(90deg, #0a6ed1 0%, #0a88ff 100%);
+  color: #ffffff;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.company-save button:hover {
+  background: linear-gradient(90deg, #094f9e 0%, #0a6ed1 100%);
+  transform: translateY(-1px);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .company-settings-form {
+    grid-template-columns: 1fr;
+  }
+}
+.company-header-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #f9fafc;
+  border: 1px solid #e3e7ed;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 28px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.company-logo-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: contain;
+  border: 1px solid #e0e0e0;
+  background: #fff;
+}
+
+.company-logo-placeholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  background: #e0e6ee;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #0a1f44;
+}
+
+.company-header-info h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  color: #0a1f44;
+}
+
+.company-header-info p {
+  font-size: 14px;
+  color: #555;
+  margin: 2px 0;
+}
+
+.company-header-meta {
+  font-size: 13px;
+  color: #0a6ed1;
+  margin-top: 4px;
+}
