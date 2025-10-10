@@ -98,15 +98,17 @@ export default function Repairs({ addToCart }) {
       if (!code) return;
     }
 
-    const { error } = await supabase.from("repairs").insert([
-      {
-        repair_no: code,
-        customer_name,
-        customer_email: customer_email || null,
-        description,
-        total_price: total_price || 0,
-        status: "PENDING",
-      },
+    const { data, error } = await supabase
+  .from("repairs")
+  .insert([
+    {
+      repair_no: code,
+      customer_name,
+      customer_email: customer_email || null,
+      description,
+      total_price: total_price || 0,
+      status: "PENDING",
+    },
     ]);
 
     if (error) {
