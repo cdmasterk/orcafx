@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { toast } from "react-toastify";
 import "./Finance.css";
+import LiveStatus from "./LiveStatus";
 
 export default function FinanceDashboard() {
   const [prices, setPrices] = useState(null);
@@ -98,7 +99,7 @@ export default function FinanceDashboard() {
         ) : (
           <p>No logs yet</p>
         )}
-
+<LiveStatus pollMs={5000} />
         <button
           className="recalc-btn"
           onClick={handleRecalc}
