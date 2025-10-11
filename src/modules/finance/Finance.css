@@ -1,0 +1,35 @@
+.finance-dashboard {
+  padding: 2rem;
+}
+
+.finance-section {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.price-card, .log-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 0.5rem;
+  line-height: 1.5;
+}
+
+.recalc-btn {
+  margin-top: 1rem;
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.recalc-btn:hover {
+  background-color: #1e3a8a;
+}

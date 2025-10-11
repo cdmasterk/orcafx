@@ -12,12 +12,14 @@ export default function MainLayout({ children }) {
           <div className="sidebar-top">
             <h2>ORCA</h2>
             <nav>
-              <Link to="/pos">💳 POS</Link>
-              <Link to="/dashboard">📊 Dashboard</Link>
-              <Link to="/warehouses/dashboard">🏭 Skladište</Link> {/* ✅ NOVI LINK */}
-              <Link to="/buyback">🔄 Otkup</Link>
-              <Link to="/custom-orders">📐 Custom narudžbe</Link>
-            </nav>
+  <Link to="/pos">💳 POS</Link>
+  <Link to="/dashboard">📊 Dashboard</Link>
+  <Link to="/warehouses/dashboard">🏭 Skladište</Link>
+  <Link to="/buyback">🔄 Otkup</Link>
+  <Link to="/custom-orders">📐 Custom narudžbe</Link>
+  <Link to="/finance">💰 Finance Hub</Link> {/* ✅ NOVI LINK */}
+</nav>
+
           </div>
 
           <div className="sidebar-bottom">

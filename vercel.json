@@ -1,8 +1,19 @@
 {
+  "functions": {
+    "api/recalculate-prices.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/recalculate-prices",
+      "dest": "/api/recalculate-prices.js"
+    }
+  ],
   "crons": [
     {
-      "path": "/api/fetch-metal-prices",
-      "schedule": "*/15 * * * *"
+      "path": "/api/recalculate-prices",
+      "schedule": "0 3 * * *"
     }
   ]
 }

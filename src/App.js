@@ -7,6 +7,9 @@ import POS from "./modules/pos/POS";
 import ProductList from "./modules/pos/ProductList";
 import Invoices from "./modules/pos/Invoices";
 
+// ===== GLAVNE Finance STRANICE =====
+import FinanceDashboard from "./modules/finance/FinanceDashboard";
+
 // ===== DASHBOARD & AUTH =====
 import Dashboard from "./modules/dashboard/Dashboard";
 import Login from "./modules/auth/Login";
@@ -109,6 +112,9 @@ function App() {
           <Route path="/reports/sessions" element={<SessionsReport />} />
           <Route path="/reports/daily-sales" element={<DailySalesReport />} />
           <Route path="/reports/bank" element={<BankReport />} />
+          
+          {/* Finance */}
+          <Route path="/finance" element={<FinanceDashboard />} />
 
           {/* Admin hub i moduli */}
           <Route path="/admin" element={<Admin />} />
