@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "api/recalculate-prices.js": {
-      "runtime": "vercel-nodejs@4.0.0"
-    }
-  },
   "routes": [
     {
       "src": "/api/recalculate-prices",
