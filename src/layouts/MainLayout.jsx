@@ -20,6 +20,7 @@ export default function MainLayout({ children }) {
   <Link to="/finance">💰 Finance Hub</Link> {/* ✅ NOVI LINK */}
 </nav>
 
+
           </div>
 
           <div className="sidebar-bottom">
