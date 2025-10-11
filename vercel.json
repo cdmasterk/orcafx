@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "api/recalculate-prices.js": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "routes": [
     {
       "src": "/api/recalculate-prices",
