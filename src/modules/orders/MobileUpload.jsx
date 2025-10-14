@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { supabase } from "../../supabaseClient";
 
 export default function MobileUpload() {
   const { orderId } = useParams();
@@ -59,20 +60,23 @@ export default function MobileUpload() {
       const base64 = await blobToBase64(blob);
       const filename = `sketch_${Date.now()}.jpg`;
 
-      const res = await fetch("/api/co-upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, filename, contentType: "image/jpeg", base64 }),
+      // ✅ SQL-only RPC — NEMA fetch() / res.json() parsiranja
+      const { data, error } = await supabase.rpc("fn_co_upload_file", {
+        p_order_id: orderId,
+        p_filename: filename,
+        p_content_type: "image/jpeg",
+        p_base64: base64,
+        p_kind: "SKETCH",
       });
 
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Upload failed");
+      if (error) throw error;
 
       alert("✅ Uploaded");
       setFile(null);
     } catch (e) {
-      setServerError(e.message || String(e));
-      alert("❌ " + (e.message || e));
+      const msg = e?.message || e?.error || String(e);
+      setServerError(msg);
+      alert("❌ " + msg);
     }
     setBusy(false);
   };
