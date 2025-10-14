@@ -5,6 +5,7 @@ export default function MobileUpload() {
   const { orderId } = useParams();
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [serverError, setServerError] = useState("");
   const canvasRef = useRef(null);
 
   const compress = (blob) =>
@@ -27,10 +28,7 @@ export default function MobileUpload() {
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
         canvas.toBlob(
-          (b) => {
-            if (b) resolve(b);
-            else reject(new Error("Compress fail"));
-          },
+          (b) => (b ? resolve(b) : reject(new Error("Compress fail"))),
           "image/jpeg",
           0.8
         );
@@ -55,6 +53,7 @@ export default function MobileUpload() {
   const upload = async () => {
     if (!file) return;
     setBusy(true);
+    setServerError("");
     try {
       const blob = await compress(file);
       const base64 = await blobToBase64(blob);
@@ -63,12 +62,7 @@ export default function MobileUpload() {
       const res = await fetch("/api/co-upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId,
-          filename,
-          contentType: "image/jpeg",
-          base64,
-        }),
+        body: JSON.stringify({ orderId, filename, contentType: "image/jpeg", base64 }),
       });
 
       const json = await res.json();
@@ -77,6 +71,7 @@ export default function MobileUpload() {
       alert("✅ Uploaded");
       setFile(null);
     } catch (e) {
+      setServerError(e.message || String(e));
       alert("❌ " + (e.message || e));
     }
     setBusy(false);
@@ -85,7 +80,7 @@ export default function MobileUpload() {
   return (
     <div style={{ padding: 16 }}>
       <h2>📷 Upload Sketch</h2>
-      <p>Order: {orderId}</p>
+      <p>Order: <b>{orderId}</b></p>
 
       <input
         type="file"
@@ -100,6 +95,10 @@ export default function MobileUpload() {
         </button>
       </div>
 
+      {serverError ? (
+        <div style={errBox}>Server error: {serverError}</div>
+      ) : null}
+
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </div>
   );
@@ -112,4 +111,14 @@ const btn = {
   borderRadius: 10,
   padding: "8px 12px",
   cursor: "pointer",
+};
+const errBox = {
+  marginTop: 10,
+  padding: 10,
+  borderRadius: 8,
+  background: "#FEF2F2",
+  color: "#991B1B",
+  border: "1px solid #FECACA",
+  fontSize: 13,
+  wordBreak: "break-word",
 };
