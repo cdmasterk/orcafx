@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import MainLayout from "./layouts/MainLayout";
+import MinimalLayout from "./layouts/MinimalLayout";
 
 // ===== GLAVNE POS STRANICE =====
 import POS from "./modules/pos/POS";
@@ -16,7 +17,7 @@ import Login from "./modules/auth/Login";
 
 // ===== OSTALI MODULI =====
 import Buyback from "./modules/buyback/Buyback";
-import CustomOrders from "./modules/customOrders/CustomOrders"; // stari modul (zadržano)
+import CustomOrders from "./modules/customOrders/CustomOrders"; // stari modul
 
 // ===== CUSTOM ORDERS (NOVI) =====
 import CustomOrdersPage from "./modules/orders/CustomOrdersPage";
@@ -63,7 +64,7 @@ import "react-toastify/dist/ReactToastify.css";
 function App() {
   const [user, setUser] = useState(null);
 
-  // ✅ Provjera user sessiona (sigurniji pattern + ispravan cleanup)
+  // ✅ Provjera user sessiona
   useEffect(() => {
     let isMounted = true;
 
@@ -84,30 +85,38 @@ function App() {
     };
   }, []);
 
-  // ✅ Ako nije logiran — prikaz login screena
   if (!user) {
     return (
       <>
         <Login onLogin={setUser} />
-        <ToastContainer
-          position="top-right"
-          autoClose={3000}
-          hideProgressBar={false}
-          newestOnTop={false}
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-          theme="light"
-        />
+        <ToastContainer position="top-right" autoClose={3000} />
       </>
     );
   }
 
-  // ✅ Ako je logiran — glavni layout
   return (
     <Router>
+      {/* 👇 Mobilne / javne stranice bez sidebara (QR upload & quick actions) */}
+      <Routes>
+        <Route
+          path="/orders/upload/:orderId"
+          element={
+            <MinimalLayout>
+              <MobileUpload />
+            </MinimalLayout>
+          }
+        />
+        <Route
+          path="/orders/actions/:orderId"
+          element={
+            <MinimalLayout>
+              <OrderQuickActions />
+            </MinimalLayout>
+          }
+        />
+      </Routes>
+
+      {/* 👇 Ostatak aplikacije s MainLayout-om (sidebar, navbar, itd.) */}
       <MainLayout>
         <Routes>
           {/* Redirect root na dashboard */}
@@ -122,8 +131,6 @@ function App() {
 
           {/* Custom Orders: novi i stari modul */}
           <Route path="/orders/custom" element={<CustomOrdersPage />} />
-          <Route path="/orders/upload/:orderId" element={<MobileUpload />} />
-          <Route path="/orders/actions/:orderId" element={<OrderQuickActions />} />
           <Route path="/custom-orders" element={<CustomOrders />} />
 
           {/* Ostali moduli */}
@@ -175,19 +182,7 @@ function App() {
         </Routes>
       </MainLayout>
 
-      {/* 🔔 Globalni ToastContainer */}
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop={false}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="light"
-      />
+      <ToastContainer position="top-right" autoClose={3000} />
     </Router>
   );
 }
