@@ -2,9 +2,9 @@
 
 .live-status {
   position: fixed;
-  top: 58px;
-  right: 18px;
-  width: 280px;
+  top: 0px;
+  right:100px;
+  width: 250px;
   background: linear-gradient(180deg, rgba(12,18,30,0.9), rgba(6,10,20,0.85));
   color: #e6eef8;
   border-radius: 10px;

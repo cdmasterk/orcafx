@@ -16,7 +16,12 @@ import Login from "./modules/auth/Login";
 
 // ===== OSTALI MODULI =====
 import Buyback from "./modules/buyback/Buyback";
-import CustomOrders from "./modules/customOrders/CustomOrders";
+import CustomOrders from "./modules/customOrders/CustomOrders"; // stari modul (zadržano)
+
+// ===== CUSTOM ORDERS (NOVI) =====
+import CustomOrdersPage from "./modules/orders/CustomOrdersPage";
+import MobileUpload from "./modules/orders/MobileUpload";
+import OrderQuickActions from "./modules/orders/OrderQuickActions";
 
 // ===== WAREHOUSE MODULI =====
 import WarehouseOverview from "./modules/warehouses/WarehouseOverview";
@@ -26,7 +31,7 @@ import WarehouseManager from "./modules/warehouses/WarehouseManager";
 import WarehouseDashboard from "./modules/warehouses/WarehouseDashboard";
 import WarehouseProcurement from "./modules/warehouses/WarehouseProcurement";
 import WarehouseTransfer from "./modules/warehouses/WarehouseTransfer";
-import StockOverview from "./modules/warehouses/StockOverview"; // ✅ dodatno
+import StockOverview from "./modules/warehouses/StockOverview";
 
 // ===== ADMIN MODULI =====
 import Admin from "./modules/admin/Admin";
@@ -58,13 +63,25 @@ import "react-toastify/dist/ReactToastify.css";
 function App() {
   const [user, setUser] = useState(null);
 
-  // ✅ Provjera user sessiona
+  // ✅ Provjera user sessiona (sigurniji pattern + ispravan cleanup)
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
-    });
-    return () => listener.subscription.unsubscribe();
+    let isMounted = true;
+
+    (async () => {
+      const { data: { user: authUser } = {} } = await supabase.auth.getUser();
+      if (isMounted) setUser(authUser || null);
+    })();
+
+    const { data: { subscription } = {} } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (isMounted) setUser(session?.user || null);
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      if (subscription) subscription.unsubscribe();
+    };
   }, []);
 
   // ✅ Ako nije logiran — prikaz login screena
@@ -103,16 +120,21 @@ function App() {
           {/* Dashboard */}
           <Route path="/dashboard" element={<Dashboard />} />
 
+          {/* Custom Orders: novi i stari modul */}
+          <Route path="/orders/custom" element={<CustomOrdersPage />} />
+          <Route path="/orders/upload/:orderId" element={<MobileUpload />} />
+          <Route path="/orders/actions/:orderId" element={<OrderQuickActions />} />
+          <Route path="/custom-orders" element={<CustomOrders />} />
+
           {/* Ostali moduli */}
           <Route path="/buyback" element={<Buyback />} />
-          <Route path="/custom-orders" element={<CustomOrders />} />
 
           {/* Reports */}
           <Route path="/reports/invoices" element={<Invoices />} />
           <Route path="/reports/sessions" element={<SessionsReport />} />
           <Route path="/reports/daily-sales" element={<DailySalesReport />} />
           <Route path="/reports/bank" element={<BankReport />} />
-          
+
           {/* Finance */}
           <Route path="/finance" element={<FinanceDashboard />} />
 
@@ -128,6 +150,8 @@ function App() {
           <Route path="/admin/stock-summary" element={<AdminStockSummary />} />
           <Route path="/admin/product-codes" element={<ProductCodeRulesManager />} />
           <Route path="/admin/product-import" element={<ProductImport />} />
+          <Route path="/admin/price-tiers" element={<PriceTiersManager />} />
+          <Route path="/admin/repair-catalog" element={<RepairCatalog />} />
 
           {/* ===== WAREHOUSES ===== */}
           <Route path="/warehouses" element={<WarehouseHub />} />
@@ -145,9 +169,6 @@ function App() {
           <Route path="/warehouses/bulk-import" element={<BulkImport />} />
           <Route path="/warehouses/product-codes" element={<ProductCodeRulesManager />} />
           <Route path="/warehouses/service-admin" element={<ServiceAdmin />} />
-          <Route path="/admin/price-tiers" element={<PriceTiersManager />} />
-          <Route path="/admin/repair-catalog" element={<RepairCatalog />} />
-
 
           {/* Fallback */}
           <Route path="*" element={<h2 style={{ padding: 24 }}>404 — Not Found</h2>} />
