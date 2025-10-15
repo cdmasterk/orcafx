@@ -9,6 +9,7 @@ export default function MobileUpload() {
   const [serverError, setServerError] = useState("");
   const canvasRef = useRef(null);
 
+  // 🔹 Kompresija slike prije slanja
   const compressTo = (blob, maxSide = 1280, quality = 0.8) =>
     new Promise((resolve, reject) => {
       const img = new Image();
@@ -38,6 +39,7 @@ export default function MobileUpload() {
       img.src = url;
     });
 
+  // 🔹 Pretvori blob u base64
   const blobToBase64 = (blob) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -50,57 +52,25 @@ export default function MobileUpload() {
       reader.readAsDataURL(blob);
     });
 
-  async function showInvokeError(e) {
-    let extra = "";
-    try {
-      // @ts-ignore some versions expose raw response here
-      if (e?.context?.response) {
-        // @ts-ignore
-        extra = await e.context.response.text();
-      }
-    } catch {}
-    const msg = e?.message || e?.error || String(e);
-    const final = extra ? `${msg} | ${extra}` : msg;
-    console.error("co-upload error:", e, extra);
-    setServerError(final);
-    alert("❌ " + final);
-  }
-
-  const testPing = async () => {
-    setBusy(true);
-    setServerError("");
-    try {
-      const { data, error } = await supabase.functions.invoke("co-upload", {
-        body: { ping: true, xOrigin: window.location.origin },
-      });
-      if (error) throw error;
-      alert("✅ PING OK:\n" + JSON.stringify(data, null, 2));
-    } catch (e) {
-      await showInvokeError(e);
-    }
-    setBusy(false);
-  };
-
+  // 🔹 Upload funkcija
   const upload = async () => {
     if (!file) return;
     setBusy(true);
     setServerError("");
+
     try {
-      // 1) original ~1280
       const orig = await compressTo(file, 1280, 0.82);
       const base64 = await blobToBase64(orig.blob);
 
-      // 2) thumb ~320
       const t = await compressTo(file, 320, 0.7);
       const base64Thumb = await blobToBase64(t.blob);
 
       const filename = `sketch_${Date.now()}.jpg`;
       const thumbname = `sketch_${Date.now()}_thumb.jpg`;
 
-      // ✅ Edge function upload u Storage + DB insert
       const { data, error } = await supabase.functions.invoke("co-upload", {
         body: {
-          xOrigin: window.location.origin,   // 🔑 šaljemo origin za hash-CORS
+          xOrigin: window.location.origin,
           orderId,
           kind: "SKETCH",
           original: {
@@ -122,53 +92,70 @@ export default function MobileUpload() {
 
       if (error) throw error;
 
-      alert("✅ Uploaded");
+      alert("✅ Upload uspješan!");
       setFile(null);
     } catch (e) {
-      await showInvokeError(e);
+      const msg = e?.message || e?.error || String(e);
+      setServerError(msg);
+      alert("❌ " + msg);
     }
+
     setBusy(false);
   };
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2>📷 Upload Sketch</h2>
+    <div style={container}>
+      <h2 style={title}>📷 Upload Sketch</h2>
       <p>Order: <b>{orderId}</b></p>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-        <button onClick={testPing} disabled={busy} style={btn}>🔎 Test function</button>
-      </div>
 
       <input
         type="file"
         accept="image/*"
         capture="environment"
         onChange={(e) => setFile(e.target.files?.[0] || null)}
+        style={input}
       />
 
-      <div style={{ marginTop: 8 }}>
-        <button onClick={upload} disabled={!file || busy} style={btn}>
-          {busy ? "Uploading…" : "Upload"}
-        </button>
-      </div>
+      <button onClick={upload} disabled={!file || busy} style={btn}>
+        {busy ? "Uploading…" : "Upload"}
+      </button>
 
-      {serverError ? (
-        <div style={errBox}>Server error: {serverError}</div>
-      ) : null}
+      {serverError && <div style={errBox}>❌ {serverError}</div>}
 
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </div>
   );
 }
 
+const container = {
+  padding: 20,
+  textAlign: "center",
+  maxWidth: 480,
+  margin: "0 auto",
+};
+
+const title = {
+  fontSize: 22,
+  marginBottom: 12,
+};
+
+const input = {
+  marginTop: 12,
+  marginBottom: 12,
+  width: "100%",
+};
+
 const btn = {
-  border: "1px solid #e5e7eb",
+  border: "none",
   background: "#111827",
   color: "#fff",
   borderRadius: 10,
-  padding: "8px 12px",
+  padding: "10px 16px",
   cursor: "pointer",
+  width: "100%",
+  fontSize: 16,
 };
+
 const errBox = {
   marginTop: 10,
   padding: 10,
