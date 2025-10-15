@@ -9,19 +9,18 @@ export default function MobileUpload() {
   const [serverError, setServerError] = useState("");
   const canvasRef = useRef(null);
 
-  const compress = (blob) =>
+  const compressTo = (blob, maxSide = 1280, quality = 0.8) =>
     new Promise((resolve, reject) => {
       const img = new Image();
       const url = URL.createObjectURL(blob);
       img.onload = () => {
-        const max = 1600;
         let { width, height } = img;
-        if (width > height && width > max) {
-          height = Math.round(height * (max / width));
-          width = max;
-        } else if (height >= width && height > max) {
-          width = Math.round(width * (max / height));
-          height = max;
+        if (width > height && width > maxSide) {
+          height = Math.round(height * (maxSide / width));
+          width = maxSide;
+        } else if (height >= width && height > maxSide) {
+          width = Math.round(width * (maxSide / height));
+          height = maxSide;
         }
         const canvas = canvasRef.current;
         canvas.width = width;
@@ -29,9 +28,9 @@ export default function MobileUpload() {
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
         canvas.toBlob(
-          (b) => (b ? resolve(b) : reject(new Error("Compress fail"))),
+          (b) => (b ? resolve({ blob: b, width, height }) : reject(new Error("Compress fail"))),
           "image/jpeg",
-          0.8
+          quality
         );
         URL.revokeObjectURL(url);
       };
@@ -56,17 +55,37 @@ export default function MobileUpload() {
     setBusy(true);
     setServerError("");
     try {
-      const blob = await compress(file);
-      const base64 = await blobToBase64(blob);
-      const filename = `sketch_${Date.now()}.jpg`;
+      // 1) original ~1280
+      const orig = await compressTo(file, 1280, 0.82);
+      const base64 = await blobToBase64(orig.blob);
 
-      // ✅ SQL-only RPC — NEMA fetch() / res.json() parsiranja
-      const { data, error } = await supabase.rpc("fn_co_upload_file", {
-        p_order_id: orderId,
-        p_filename: filename,
-        p_content_type: "image/jpeg",
-        p_base64: base64,
-        p_kind: "SKETCH",
+      // 2) thumb ~320
+      const t = await compressTo(file, 320, 0.7);
+      const base64Thumb = await blobToBase64(t.blob);
+
+      const filename = `sketch_${Date.now()}.jpg`;
+      const thumbname = `sketch_${Date.now()}_thumb.jpg`;
+
+      // ✅ Edge function upload u Storage + DB insert
+      const { data, error } = await supabase.functions.invoke("co-upload", {
+        body: {
+          orderId,
+          kind: "SKETCH",
+          original: {
+            filename,
+            base64,
+            contentType: "image/jpeg",
+            width: orig.width,
+            height: orig.height,
+          },
+          thumb: {
+            filename: thumbname,
+            base64: base64Thumb,
+            contentType: "image/jpeg",
+            width: t.width,
+            height: t.height,
+          }
+        },
       });
 
       if (error) throw error;

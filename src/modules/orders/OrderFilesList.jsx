@@ -1,28 +1,36 @@
-// src/modules/orders/OrderFilesList.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 
+const BUCKET = "custom-orders";
+
 export default function OrderFilesList({ orderId }) {
   const [rows, setRows] = useState([]);
-  const [active, setActive] = useState(null); // aktivni preview
+  const [active, setActive] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const getPublicUrl = (path) =>
+    supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
   const load = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from("custom_order_files")
-        .select("id, filename, content_type, content, size_bytes, kind, created_at")
+        .select("id, file_path, thumb_path, content, content_type, size_bytes, kind, created_at")
         .eq("order_id", orderId)
-        .not("content", "is", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      // Pretvori bytea (base64) kao data URL
-      const list = (data || []).map((f) => ({
-        ...f,
-        src: f.content ? `data:${f.content_type};base64,${f.content}` : null,
-      }));
+      const list = (data || []).map((f) => {
+        if (f.file_path) {
+          return { ...f, url: getPublicUrl(f.file_path), thumb: f.thumb_path ? getPublicUrl(f.thumb_path) : null };
+        } else if (f.content) {
+          // legacy bytea
+          const src = `data:${f.content_type};base64,${f.content}`;
+          return { ...f, url: src, thumb: src };
+        }
+        return { ...f, url: null, thumb: null };
+      });
       setRows(list);
     } catch (e) {
       console.error(e);
@@ -31,10 +39,7 @@ export default function OrderFilesList({ orderId }) {
     setLoading(false);
   };
 
-  useEffect(() => {
-    if (orderId) load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderId]);
+  useEffect(() => { if (orderId) load(); /* eslint-disable-next-line */ }, [orderId]);
 
   return (
     <div className="card">
@@ -54,39 +59,37 @@ export default function OrderFilesList({ orderId }) {
             className="card"
             style={{ padding: 8, cursor: "pointer" }}
             onClick={() => setActive(f)}
-            title={`${f.filename} (${f.kind})`}
+            title={`${f.file_path || "inline"} (${f.kind})`}
           >
-            {f.src ? (
+            {f.thumb ? (
               <img
-                src={f.src}
-                alt={f.filename}
+                src={f.thumb}
+                alt="thumb"
                 style={{ width: "100%", height: 100, objectFit: "cover", borderRadius: 8 }}
               />
             ) : (
               <div className="small">No preview</div>
             )}
             <div className="small" style={{ marginTop: 6 }}>
-              <b style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {f.filename}
-              </b>
               <span className="muted">{f.kind} • {new Date(f.created_at).toLocaleString()}</span>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Modal preview */}
       {active && (
         <div style={overlay} onClick={() => setActive(null)}>
           <div style={modal} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <div style={{ fontWeight: 600 }}>{active.filename}</div>
+              <div style={{ fontWeight: 600 }}>
+                {active.file_path ? active.file_path.split("/").pop() : "inline"}
+              </div>
               <button className="btn" onClick={() => setActive(null)}>Close</button>
             </div>
-            {active.src ? (
+            {active.url ? (
               <img
-                src={active.src}
-                alt={active.filename}
+                src={active.url}
+                alt="full"
                 style={{ display: "block", width: "100%", maxHeight: "70vh", objectFit: "contain", marginTop: 10 }}
               />
             ) : (
@@ -112,7 +115,6 @@ const overlay = {
   justifyContent: "center",
   padding: 16,
 };
-
 const modal = {
   width: "min(100%, 920px)",
   background: "#fff",

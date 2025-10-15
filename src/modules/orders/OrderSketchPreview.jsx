@@ -1,10 +1,14 @@
-// src/modules/orders/OrderSketchPreview.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
+
+const BUCKET = "custom-orders";
 
 export default function OrderSketchPreview({ orderId, title = "Latest sketch" }) {
   const [row, setRow] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const getPublicUrl = (path) =>
+    supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
   const load = async () => {
     setLoading(true);
@@ -15,7 +19,12 @@ export default function OrderSketchPreview({ orderId, title = "Latest sketch" })
         .eq("order_id", orderId)
         .maybeSingle();
       if (error) throw error;
-      setRow(data || null);
+      if (!data) { setRow(null); setLoading(false); return; }
+
+      const url = data.file_path ? getPublicUrl(data.file_path) : null;
+      const thumb = data.thumb_path ? getPublicUrl(data.thumb_path) : null;
+
+      setRow({ ...data, url, thumb });
     } catch (e) {
       console.error(e);
       setRow(null);
@@ -41,11 +50,11 @@ export default function OrderSketchPreview({ orderId, title = "Latest sketch" })
         <div className="small muted" style={{ marginTop: 8 }}>No sketch uploaded yet.</div>
       )}
 
-      {row && (
+      {row?.url && (
         <>
           <img
-            src={`data:${row.content_type};base64,${row.content_b64}`}
-            alt={row.filename}
+            src={row.thumb || row.url}
+            alt="sketch"
             style={{
               display: "block",
               width: "100%",
@@ -56,7 +65,7 @@ export default function OrderSketchPreview({ orderId, title = "Latest sketch" })
             }}
           />
           <div className="small muted" style={{ marginTop: 6 }}>
-            {row.filename} • {new Date(row.created_at).toLocaleString()}
+            {new Date(row.created_at).toLocaleString()}
           </div>
         </>
       )}
