@@ -69,6 +69,8 @@ export default function MobileUpload() {
       // ✅ Edge function upload u Storage + DB insert
       const { data, error } = await supabase.functions.invoke("co-upload", {
         body: {
+          // 👇 šaljemo origin da hash-CORS u funkciji može proći i kad headeri fale
+          xOrigin: window.location.origin,
           orderId,
           kind: "SKETCH",
           original: {
@@ -84,12 +86,25 @@ export default function MobileUpload() {
             contentType: "image/jpeg",
             width: t.width,
             height: t.height,
-          }
+          },
         },
       });
 
-      if (error) throw error;
+      // Supabase vraća { data, error }. Kad je non-2xx, error postoji.
+      if (error) {
+        // pokušaj izvući sirovu poruku iz response-a (debug iz edge funkcije: detectedOrigin, computedHash, expected…)
+        let extra = "";
+        try {
+          // @ts-ignore supabase-js izlaže response u error.context.response
+          if (error.context?.response) {
+            // @ts-ignore
+            extra = await error.context.response.text();
+          }
+        } catch {}
+        throw new Error(`${error.message}${extra ? " | " + extra : ""}`);
+      }
 
+      // Ako je sve ok:
       alert("✅ Uploaded");
       setFile(null);
     } catch (e) {
