@@ -3,6 +3,7 @@ import React from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import OrderSketchPreview from "./OrderSketchPreview";
 import OrderFilesList from "./OrderFilesList";
+import OrderSketchViewer from "./OrderSketchViewer";
 
 export default function OrderQuickActions() {
   const { orderId } = useParams();
@@ -20,6 +21,7 @@ export default function OrderQuickActions() {
 
       <OrderSketchPreview orderId={orderId} />
       <OrderFilesList orderId={orderId} />
+      <OrderSketchViewer orderId={orderId} />
     </div>
   );
 }
