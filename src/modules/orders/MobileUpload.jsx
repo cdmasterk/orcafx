@@ -50,6 +50,37 @@ export default function MobileUpload() {
       reader.readAsDataURL(blob);
     });
 
+  async function showInvokeError(e) {
+    let extra = "";
+    try {
+      // @ts-ignore some versions expose raw response here
+      if (e?.context?.response) {
+        // @ts-ignore
+        extra = await e.context.response.text();
+      }
+    } catch {}
+    const msg = e?.message || e?.error || String(e);
+    const final = extra ? `${msg} | ${extra}` : msg;
+    console.error("co-upload error:", e, extra);
+    setServerError(final);
+    alert("❌ " + final);
+  }
+
+  const testPing = async () => {
+    setBusy(true);
+    setServerError("");
+    try {
+      const { data, error } = await supabase.functions.invoke("co-upload", {
+        body: { ping: true, xOrigin: window.location.origin },
+      });
+      if (error) throw error;
+      alert("✅ PING OK:\n" + JSON.stringify(data, null, 2));
+    } catch (e) {
+      await showInvokeError(e);
+    }
+    setBusy(false);
+  };
+
   const upload = async () => {
     if (!file) return;
     setBusy(true);
@@ -69,8 +100,7 @@ export default function MobileUpload() {
       // ✅ Edge function upload u Storage + DB insert
       const { data, error } = await supabase.functions.invoke("co-upload", {
         body: {
-          // 👇 šaljemo origin da hash-CORS u funkciji može proći i kad headeri fale
-          xOrigin: window.location.origin,
+          xOrigin: window.location.origin,   // 🔑 šaljemo origin za hash-CORS
           orderId,
           kind: "SKETCH",
           original: {
@@ -90,27 +120,12 @@ export default function MobileUpload() {
         },
       });
 
-      // Supabase vraća { data, error }. Kad je non-2xx, error postoji.
-      if (error) {
-        // pokušaj izvući sirovu poruku iz response-a (debug iz edge funkcije: detectedOrigin, computedHash, expected…)
-        let extra = "";
-        try {
-          // @ts-ignore supabase-js izlaže response u error.context.response
-          if (error.context?.response) {
-            // @ts-ignore
-            extra = await error.context.response.text();
-          }
-        } catch {}
-        throw new Error(`${error.message}${extra ? " | " + extra : ""}`);
-      }
+      if (error) throw error;
 
-      // Ako je sve ok:
       alert("✅ Uploaded");
       setFile(null);
     } catch (e) {
-      const msg = e?.message || e?.error || String(e);
-      setServerError(msg);
-      alert("❌ " + msg);
+      await showInvokeError(e);
     }
     setBusy(false);
   };
@@ -119,6 +134,10 @@ export default function MobileUpload() {
     <div style={{ padding: 16 }}>
       <h2>📷 Upload Sketch</h2>
       <p>Order: <b>{orderId}</b></p>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <button onClick={testPing} disabled={busy} style={btn}>🔎 Test function</button>
+      </div>
 
       <input
         type="file"
