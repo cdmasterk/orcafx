@@ -40,7 +40,7 @@ export default function CustomOrderForm({ onCreated }) {
     model: "",
 
     customer_name: "",
-    customer_email: "",   // ✅ DODANO
+    customer_email: "",   // ⬅️ DODANO: mail kupca
     male_size: "",
     engraving_1: "",
     joint_engraving: "",
@@ -233,7 +233,6 @@ export default function CustomOrderForm({ onCreated }) {
 
       order = omitEmpty(order);
       if (!order.order_no) delete order.order_no;
-      if (!order.customer_email) delete order.customer_email; // ✅ očisti ako nije unesen
 
       const payloadItems = items.map((it) => ({
         product_id: it.product_id || null,
@@ -271,7 +270,7 @@ export default function CustomOrderForm({ onCreated }) {
         color: "",
         model: "",
         customer_name: "",
-        customer_email: "", // ✅ reset
+        customer_email: "",   // ⬅️ reset
         male_size: "",
         engraving_1: "",
         joint_engraving: "",
@@ -339,20 +338,33 @@ export default function CustomOrderForm({ onCreated }) {
             <label>Customer</label>
             <input className="input" value={form.customer_name} onChange={(e) => setF("customer_name", e.target.value)} />
           </div>
-          {/* ✅ Customer Email – dodano bez ikakvog rezanja ostatka */}
           <div className="field">
-            <label>Customer Email</label>
+            <label>Customer email</label> {/* ⬅️ DODANO */}
             <input
               className="input"
               type="email"
+              placeholder="example@domain.com"
               value={form.customer_email}
               onChange={(e) => setF("customer_email", e.target.value)}
-              placeholder="kupac@email.com"
             />
           </div>
           <div className="field">
             <label>Quantity</label>
             <input className="input" type="number" min="1" value={form.quantity} onChange={(e) => setF("quantity", Number(e.target.value || 1))} />
+          </div>
+        </div>
+
+        <div className="row3">
+          <div className="field" style={{ display: "none" }}>
+            {/* Ostavio mjesto ako želiš "Has sketch?" tu — trenutno je pomaknuto dolje */}
+          </div>
+          <div className="field" style={{ display: "none" }} />
+          <div className="field">
+            <label>Has sketch?</label>
+            <select className="input" value={form.has_sketch ? "yes" : "no"} onChange={(e) => setF("has_sketch", e.target.value === "yes")}>
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
           </div>
         </div>
 
@@ -485,6 +497,7 @@ export default function CustomOrderForm({ onCreated }) {
           <h3>🧾 Sažetak</h3>
           <div className="line"><span>Order no</span><b>{form.order_no || "AUTO"}</b></div>
           <div className="line"><span>Customer</span><b>{form.customer_name || "-"}</b></div>
+          <div className="line"><span>Customer email</span><b>{form.customer_email || "-"}</b></div> {/* ⬅️ prikaz */}
           <div className="line"><span>Qty</span><b>{form.quantity}</b></div>
           <div className="line"><span>Due</span><b>{form.due_date ? new Date(form.due_date).toLocaleString() : "-"}</b></div>
           <div className="line"><span>Status</span><b>{form.status}</b></div>
