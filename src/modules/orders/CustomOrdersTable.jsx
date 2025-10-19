@@ -1,4 +1,3 @@
-// src/modules/orders/CustomOrdersTable.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { toast } from "react-toastify";
@@ -82,24 +81,35 @@ export default function CustomOrdersTable({ refreshKey }) {
     navigate(`/orders/upload/${id}`);
   };
 
-  // 🔹 NOVO: Generiranje radnog naloga + slanje maila
+  // 🔹 NOVO: Generiranje radnog naloga + slanje maila (uz potvrdu)
   const generateWorkOrder = async (id) => {
     try {
-      const confirm = window.confirm("Želite li generirati Radni nalog?");
-      if (!confirm) return;
+      const confirmGen = window.confirm("Želite li generirati Radni nalog?");
+      if (!confirmGen) return;
 
-      // 1️⃣ Generiraj radni nalog u Supabaseu
+      // 1️⃣ Generiraj radni nalog (Supabase RPC)
       const { data, error } = await supabase.rpc("fn_generate_work_order", {
         p_order_id: id,
       });
       if (error) throw error;
+
       const workOrderId = data;
       toast.success("✅ Radni nalog uspješno generiran!");
 
-      // 2️⃣ Pozovi Edge Function za PDF + mail
-      toast.info("📨 Slanje naloga e-mailom...");
+      // 2️⃣ Pitaj korisnika želi li odmah poslati e-mail
+      const confirmMail = window.confirm(
+        "Želite li sada poslati radni nalog e-mailom (partner / interna / kupac)?"
+      );
+      if (!confirmMail) {
+        toast.info("📄 Nalog je kreiran, slanje e-maila preskočeno.");
+        load();
+        return;
+      }
+
+      // 3️⃣ Slanje maila putem Edge funkcije
+      toast.info("📨 Slanje radnog naloga e-mailom...");
       const { data: fnRes, error: fnErr } = await supabase.functions.invoke(
-        "send_work_order_mail",
+        "send-workorder-email", // naziv edge funkcije
         {
           body: { workOrderId },
         }
@@ -107,11 +117,11 @@ export default function CustomOrdersTable({ refreshKey }) {
 
       if (fnErr) {
         console.error(fnErr);
-        toast.error("⚠️ Nalog kreiran, ali slanje maila nije uspjelo.");
+        toast.error("⚠️ Nalog kreiran, ali slanje e-maila nije uspjelo.");
       } else if (fnRes?.ok) {
         toast.success("📬 Nalog poslan e-mailom (partner / interna / kupac).");
 
-        // 3️⃣ Automatski PDF download (ako je vraćen)
+        // 4️⃣ Automatski PDF download (ako je vraćen)
         if (fnRes.pdfBase64) {
           const link = document.createElement("a");
           link.href = `data:application/pdf;base64,${fnRes.pdfBase64}`;
@@ -119,10 +129,10 @@ export default function CustomOrdersTable({ refreshKey }) {
           link.click();
         }
       } else {
-        toast.warn("⚠️ Mail nije poslan (bez primatelja).");
+        toast.warn("⚠️ Mail nije poslan (nema primatelja).");
       }
 
-      // 4️⃣ Refresh tablice
+      // 5️⃣ Refresh tablice
       load();
     } catch (e) {
       console.error(e);
@@ -191,7 +201,6 @@ export default function CustomOrdersTable({ refreshKey }) {
                 </td>
                 <td>{new Date(r.created_at).toLocaleString()}</td>
 
-                {/* Akcije */}
                 <td
                   className="actions"
                   style={{
@@ -201,9 +210,12 @@ export default function CustomOrdersTable({ refreshKey }) {
                     alignItems: "center",
                   }}
                 >
+                  {/* QR modal */}
                   <button className="btn" onClick={() => openQR(r.id)}>
                     🔳 QR
                   </button>
+
+                  {/* View / Upload */}
                   <button className="btn" onClick={() => handleView(r.id)}>
                     👁️ View
                   </button>
@@ -211,6 +223,7 @@ export default function CustomOrdersTable({ refreshKey }) {
                     📷 Upload
                   </button>
 
+                  {/* Status control */}
                   {r.status === "PENDING" && (
                     <button
                       className="btn"
@@ -242,6 +255,7 @@ export default function CustomOrdersTable({ refreshKey }) {
                     </button>
                   )}
 
+                  {/* Generate Work Order + email */}
                   {r.status !== "DELIVERED" && (
                     <button
                       className="btn workorder"
@@ -264,6 +278,7 @@ export default function CustomOrdersTable({ refreshKey }) {
         </table>
       </div>
 
+      {/* QR modal */}
       {showQR && qrFor && <OrderQRCode orderId={qrFor} onClose={closeQR} />}
     </>
   );
