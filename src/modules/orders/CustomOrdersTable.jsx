@@ -13,36 +13,20 @@ export default function CustomOrdersTable({ refreshKey }) {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
 
-  // QR modal state
   const [showQR, setShowQR] = useState(false);
   const [qrFor, setQrFor] = useState(null);
 
-  const openQR = (orderId) => {
-    setQrFor(orderId);
-    setShowQR(true);
-  };
-  const closeQR = () => {
-    setShowQR(false);
-    setQrFor(null);
-  };
+  const openQR = (orderId) => { setQrFor(orderId); setShowQR(true); };
+  const closeQR = () => { setShowQR(false); setQrFor(null); };
 
-  // 🔹 Load all custom orders
   const load = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from("custom_orders")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(300);
-
+      let query = supabase.from("custom_orders").select("*").order("created_at", { ascending: false }).limit(300);
       if (filter !== "ALL") query = query.eq("status", filter);
       if (q.trim().length > 0) {
-        query = query.or(
-          `order_no.ilike.%${q}%,customer_name.ilike.%${q}%,model.ilike.%${q}%`
-        );
+        query = query.or(`order_no.ilike.%${q}%,customer_name.ilike.%${q}%,model.ilike.%${q}%`);
       }
-
       const { data, error } = await query;
       if (error) throw error;
       setRows(data || []);
@@ -54,12 +38,8 @@ export default function CustomOrdersTable({ refreshKey }) {
     }
   };
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, refreshKey]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter, refreshKey]);
 
-  // 🔹 Promjena statusa pomoću Supabase RPC funkcija
   const updateStatus = async (fnName, id, successMsg) => {
     try {
       const { error } = await supabase.rpc(fnName, { p_order_id: id });
@@ -81,38 +61,29 @@ export default function CustomOrdersTable({ refreshKey }) {
     navigate(`/orders/upload/${id}`);
   };
 
-  // 🔹 NOVO: Generiranje radnog naloga + slanje maila (uz potvrdu)
+  // 🔹 Generiranje radnog naloga + potvrda slanja e-maila
   const generateWorkOrder = async (id) => {
     try {
       const confirmGen = window.confirm("Želite li generirati Radni nalog?");
       if (!confirmGen) return;
 
-      // 1️⃣ Generiraj radni nalog (Supabase RPC)
-      const { data, error } = await supabase.rpc("fn_generate_work_order", {
-        p_order_id: id,
-      });
+      const { data, error } = await supabase.rpc("fn_generate_work_order", { p_order_id: id });
       if (error) throw error;
 
       const workOrderId = data;
       toast.success("✅ Radni nalog uspješno generiran!");
 
-      // 2️⃣ Pitaj korisnika želi li odmah poslati e-mail
-      const confirmMail = window.confirm(
-        "Želite li sada poslati radni nalog e-mailom (partner / interna / kupac)?"
-      );
+      const confirmMail = window.confirm("Želite li sada poslati radni nalog e-mailom (partner / interna / kupac)?");
       if (!confirmMail) {
         toast.info("📄 Nalog je kreiran, slanje e-maila preskočeno.");
         load();
         return;
       }
 
-      // 3️⃣ Slanje maila putem Edge funkcije
       toast.info("📨 Slanje radnog naloga e-mailom...");
       const { data: fnRes, error: fnErr } = await supabase.functions.invoke(
-        "send-workorder-email", // naziv edge funkcije
-        {
-          body: { workOrderId },
-        }
+        "send_work_order_mail",
+        { body: { workOrderId } }
       );
 
       if (fnErr) {
@@ -120,8 +91,6 @@ export default function CustomOrdersTable({ refreshKey }) {
         toast.error("⚠️ Nalog kreiran, ali slanje e-maila nije uspjelo.");
       } else if (fnRes?.ok) {
         toast.success("📬 Nalog poslan e-mailom (partner / interna / kupac).");
-
-        // 4️⃣ Automatski PDF download (ako je vraćen)
         if (fnRes.pdfBase64) {
           const link = document.createElement("a");
           link.href = `data:application/pdf;base64,${fnRes.pdfBase64}`;
@@ -132,7 +101,6 @@ export default function CustomOrdersTable({ refreshKey }) {
         toast.warn("⚠️ Mail nije poslan (nema primatelja).");
       }
 
-      // 5️⃣ Refresh tablice
       load();
     } catch (e) {
       console.error(e);
@@ -183,84 +151,33 @@ export default function CustomOrdersTable({ refreshKey }) {
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
-                <td>
-                  <b>{r.order_no}</b>
-                </td>
+                <td><b>{r.order_no}</b></td>
                 <td>{r.customer_name || "-"}</td>
                 <td>{r.product_type || "-"}</td>
                 <td>{r.purity || "-"}</td>
                 <td>{r.color || "-"}</td>
                 <td>{r.quantity || 1}</td>
-                <td>
-                  <OrderStatusBadge status={r.status} />
-                </td>
-                <td>
-                  {r.due_date
-                    ? new Date(r.due_date).toLocaleString()
-                    : "-"}
-                </td>
+                <td><OrderStatusBadge status={r.status} /></td>
+                <td>{r.due_date ? new Date(r.due_date).toLocaleString() : "-"}</td>
                 <td>{new Date(r.created_at).toLocaleString()}</td>
 
-                <td
-                  className="actions"
-                  style={{
-                    display: "flex",
-                    gap: 6,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                  }}
-                >
-                  {/* QR modal */}
-                  <button className="btn" onClick={() => openQR(r.id)}>
-                    🔳 QR
-                  </button>
+                <td className="actions" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <button className="btn" onClick={() => openQR(r.id)}>🔳 QR</button>
+                  <button className="btn" onClick={() => handleView(r.id)}>👁️ View</button>
+                  <button className="btn" onClick={() => handleUpload(r.id)}>📷 Upload</button>
 
-                  {/* View / Upload */}
-                  <button className="btn" onClick={() => handleView(r.id)}>
-                    👁️ View
-                  </button>
-                  <button className="btn" onClick={() => handleUpload(r.id)}>
-                    📷 Upload
-                  </button>
-
-                  {/* Status control */}
                   {r.status === "PENDING" && (
-                    <button
-                      className="btn"
-                      onClick={() =>
-                        updateStatus("fn_co_start", r.id, "▶️ Startano")
-                      }
-                    >
-                      ▶️ Start
-                    </button>
+                    <button className="btn" onClick={() => updateStatus("fn_co_start", r.id, "▶️ Startano")}>▶️ Start</button>
                   )}
                   {r.status === "IN_PROGRESS" && (
-                    <button
-                      className="btn"
-                      onClick={() =>
-                        updateStatus("fn_co_ready", r.id, "✅ Ready")
-                      }
-                    >
-                      ✅ Ready
-                    </button>
+                    <button className="btn" onClick={() => updateStatus("fn_co_ready", r.id, "✅ Ready")}>✅ Ready</button>
                   )}
                   {r.status === "READY" && (
-                    <button
-                      className="btn"
-                      onClick={() =>
-                        updateStatus("fn_co_delivered", r.id, "📦 Delivered")
-                      }
-                    >
-                      📦 Delivered
-                    </button>
+                    <button className="btn" onClick={() => updateStatus("fn_co_delivered", r.id, "📦 Delivered")}>📦 Delivered</button>
                   )}
 
-                  {/* Generate Work Order + email */}
                   {r.status !== "DELIVERED" && (
-                    <button
-                      className="btn workorder"
-                      onClick={() => generateWorkOrder(r.id)}
-                    >
+                    <button className="btn workorder" onClick={() => generateWorkOrder(r.id)}>
                       📄 Generate Work Order
                     </button>
                   )}
@@ -269,16 +186,13 @@ export default function CustomOrdersTable({ refreshKey }) {
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={10} className="small">
-                  Nema zapisa
-                </td>
+                <td colSpan={10} className="small">Nema zapisa</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {/* QR modal */}
       {showQR && qrFor && <OrderQRCode orderId={qrFor} onClose={closeQR} />}
     </>
   );
