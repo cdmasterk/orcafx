@@ -40,6 +40,7 @@ export default function CustomOrderForm({ onCreated }) {
     model: "",
 
     customer_name: "",
+    customer_email: "",   // ✅ DODANO
     male_size: "",
     engraving_1: "",
     joint_engraving: "",
@@ -232,6 +233,7 @@ export default function CustomOrderForm({ onCreated }) {
 
       order = omitEmpty(order);
       if (!order.order_no) delete order.order_no;
+      if (!order.customer_email) delete order.customer_email; // ✅ očisti ako nije unesen
 
       const payloadItems = items.map((it) => ({
         product_id: it.product_id || null,
@@ -269,6 +271,7 @@ export default function CustomOrderForm({ onCreated }) {
         color: "",
         model: "",
         customer_name: "",
+        customer_email: "", // ✅ reset
         male_size: "",
         engraving_1: "",
         joint_engraving: "",
@@ -336,16 +339,20 @@ export default function CustomOrderForm({ onCreated }) {
             <label>Customer</label>
             <input className="input" value={form.customer_name} onChange={(e) => setF("customer_name", e.target.value)} />
           </div>
+          {/* ✅ Customer Email – dodano bez ikakvog rezanja ostatka */}
+          <div className="field">
+            <label>Customer Email</label>
+            <input
+              className="input"
+              type="email"
+              value={form.customer_email}
+              onChange={(e) => setF("customer_email", e.target.value)}
+              placeholder="kupac@email.com"
+            />
+          </div>
           <div className="field">
             <label>Quantity</label>
             <input className="input" type="number" min="1" value={form.quantity} onChange={(e) => setF("quantity", Number(e.target.value || 1))} />
-          </div>
-          <div className="field">
-            <label>Has sketch?</label>
-            <select className="input" value={form.has_sketch ? "yes" : "no"} onChange={(e) => setF("has_sketch", e.target.value === "yes")}>
-              <option value="no">No</option>
-              <option value="yes">Yes</option>
-            </select>
           </div>
         </div>
 

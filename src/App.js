@@ -1,3 +1,4 @@
+// src/App.js
 import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import MainLayout from "./layouts/MainLayout";
@@ -96,8 +97,8 @@ function App() {
 
   return (
     <Router>
-      {/* 👇 Mobilne / javne stranice bez sidebara (QR upload & quick actions) */}
       <Routes>
+        {/* === Fullscreen rute bez sidebara (MinimalLayout s children) === */}
         <Route
           path="/orders/upload/:orderId"
           element={
@@ -114,73 +115,78 @@ function App() {
             </MinimalLayout>
           }
         />
+
+        {/* === Sve ostalo kroz tvoj MainLayout koji koristi {children} === */}
+        <Route
+          path="*"
+          element={
+            <MainLayout>
+              <Routes>
+                {/* Redirect root na dashboard */}
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+                {/* Glavne POS rute */}
+                <Route path="/pos" element={<POS />} />
+                <Route path="/settings" element={<ProductList />} />
+
+                {/* Dashboard */}
+                <Route path="/dashboard" element={<Dashboard />} />
+
+                {/* Custom Orders: novi i stari modul */}
+                <Route path="/orders/custom" element={<CustomOrdersPage />} />
+                <Route path="/custom-orders" element={<CustomOrders />} />
+
+                {/* Ostali moduli */}
+                <Route path="/buyback" element={<Buyback />} />
+
+                {/* Reports */}
+                <Route path="/reports/invoices" element={<Invoices />} />
+                <Route path="/reports/sessions" element={<SessionsReport />} />
+                <Route path="/reports/daily-sales" element={<DailySalesReport />} />
+                <Route path="/reports/bank" element={<BankReport />} />
+
+                {/* Finance */}
+                <Route path="/finance" element={<FinanceDashboard />} />
+
+                {/* Admin hub i moduli */}
+                <Route path="/admin" element={<Admin />} />
+                <Route path="/admin/stores" element={<StoreHub />} />
+                <Route path="/admin/pos" element={<PosAdmin />} />
+                <Route path="/admin/company" element={<CompanySettings />} />
+                <Route path="/admin/fiscal/:posId" element={<FiscalSettings />} />
+                <Route path="/admin/bulk-import" element={<BulkImport />} />
+                <Route path="/admin/services" element={<ServiceAdmin />} />
+                <Route path="/admin/stock" element={<AdminStock />} />
+                <Route path="/admin/stock-summary" element={<AdminStockSummary />} />
+                <Route path="/admin/product-codes" element={<ProductCodeRulesManager />} />
+                <Route path="/admin/product-import" element={<ProductImport />} />
+                <Route path="/admin/price-tiers" element={<PriceTiersManager />} />
+                <Route path="/admin/repair-catalog" element={<RepairCatalog />} />
+
+                {/* ===== WAREHOUSES ===== */}
+                <Route path="/warehouses" element={<WarehouseHub />} />
+                <Route path="/warehouses/dashboard" element={<WarehouseDashboard />} />
+                <Route path="/warehouses/overview" element={<WarehouseOverview />} />
+                <Route path="/warehouses/summary" element={<WarehouseSummary />} />
+                <Route path="/warehouses/manage" element={<WarehouseManager />} />
+                <Route path="/warehouses/procurement" element={<WarehouseProcurement />} />
+                <Route path="/warehouses/transfer" element={<WarehouseTransfer />} />
+
+                {/* ===== DODATNE RUTE IZ ADMINA ===== */}
+                <Route path="/warehouses/stock-overview" element={<StockOverview />} />
+                <Route path="/warehouses/stock-summary" element={<AdminStockSummary />} />
+                <Route path="/warehouses/product-import" element={<ProductImport />} />
+                <Route path="/warehouses/bulk-import" element={<BulkImport />} />
+                <Route path="/warehouses/product-codes" element={<ProductCodeRulesManager />} />
+                <Route path="/warehouses/service-admin" element={<ServiceAdmin />} />
+
+                {/* Fallback */}
+                <Route path="*" element={<h2 style={{ padding: 24 }}>404 — Not Found</h2>} />
+              </Routes>
+            </MainLayout>
+          }
+        />
       </Routes>
-
-      {/* 👇 Ostatak aplikacije s MainLayout-om (sidebar, navbar, itd.) */}
-      <MainLayout>
-        <Routes>
-          {/* Redirect root na dashboard */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-          {/* Glavne POS rute */}
-          <Route path="/pos" element={<POS />} />
-          <Route path="/settings" element={<ProductList />} />
-
-          {/* Dashboard */}
-          <Route path="/dashboard" element={<Dashboard />} />
-
-          {/* Custom Orders: novi i stari modul */}
-          <Route path="/orders/custom" element={<CustomOrdersPage />} />
-          <Route path="/custom-orders" element={<CustomOrders />} />
-
-          {/* Ostali moduli */}
-          <Route path="/buyback" element={<Buyback />} />
-
-          {/* Reports */}
-          <Route path="/reports/invoices" element={<Invoices />} />
-          <Route path="/reports/sessions" element={<SessionsReport />} />
-          <Route path="/reports/daily-sales" element={<DailySalesReport />} />
-          <Route path="/reports/bank" element={<BankReport />} />
-
-          {/* Finance */}
-          <Route path="/finance" element={<FinanceDashboard />} />
-
-          {/* Admin hub i moduli */}
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/admin/stores" element={<StoreHub />} />
-          <Route path="/admin/pos" element={<PosAdmin />} />
-          <Route path="/admin/company" element={<CompanySettings />} />
-          <Route path="/admin/fiscal/:posId" element={<FiscalSettings />} />
-          <Route path="/admin/bulk-import" element={<BulkImport />} />
-          <Route path="/admin/services" element={<ServiceAdmin />} />
-          <Route path="/admin/stock" element={<AdminStock />} />
-          <Route path="/admin/stock-summary" element={<AdminStockSummary />} />
-          <Route path="/admin/product-codes" element={<ProductCodeRulesManager />} />
-          <Route path="/admin/product-import" element={<ProductImport />} />
-          <Route path="/admin/price-tiers" element={<PriceTiersManager />} />
-          <Route path="/admin/repair-catalog" element={<RepairCatalog />} />
-
-          {/* ===== WAREHOUSES ===== */}
-          <Route path="/warehouses" element={<WarehouseHub />} />
-          <Route path="/warehouses/dashboard" element={<WarehouseDashboard />} />
-          <Route path="/warehouses/overview" element={<WarehouseOverview />} />
-          <Route path="/warehouses/summary" element={<WarehouseSummary />} />
-          <Route path="/warehouses/manage" element={<WarehouseManager />} />
-          <Route path="/warehouses/procurement" element={<WarehouseProcurement />} />
-          <Route path="/warehouses/transfer" element={<WarehouseTransfer />} />
-
-          {/* ===== DODATNE RUTE IZ ADMINA ===== */}
-          <Route path="/warehouses/stock-overview" element={<StockOverview />} />
-          <Route path="/warehouses/stock-summary" element={<AdminStockSummary />} />
-          <Route path="/warehouses/product-import" element={<ProductImport />} />
-          <Route path="/warehouses/bulk-import" element={<BulkImport />} />
-          <Route path="/warehouses/product-codes" element={<ProductCodeRulesManager />} />
-          <Route path="/warehouses/service-admin" element={<ServiceAdmin />} />
-
-          {/* Fallback */}
-          <Route path="*" element={<h2 style={{ padding: 24 }}>404 — Not Found</h2>} />
-        </Routes>
-      </MainLayout>
 
       <ToastContainer position="top-right" autoClose={3000} />
     </Router>
