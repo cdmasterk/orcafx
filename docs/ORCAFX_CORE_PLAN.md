@@ -1,5 +1,5 @@
 # ORCAFX — Core Plan  
-_Last updated: October 2025_
+_Last updated: October 2025 (post-vercel outage sync)_
 
 ---
 
@@ -8,7 +8,7 @@ _Last updated: October 2025_
 - [ ] Dodati fiskalizaciju (API za Hrvatsku)
 - [x] Računi: print/export PDF + automatsko spremanje u Supabase
 - [ ] UX: brzi prečaci (tipkovnica, barcode)
-- [ ] Dodati “Custom Orders” tab u POS (veza s proizvodnjom)
+- [x] Dodati “Custom Orders” tab u POS (veza s proizvodnjom)
 - [x] Storno mehanizam (povećanje stocka pri poništenju računa)
 
 ---
@@ -26,6 +26,7 @@ _Last updated: October 2025_
 - [x] Automatski izračun otkupne cijene po gramu/čistoći
 - [ ] Izdavanje računa otkupa (dokument / PDF)
 - [ ] Povezivanje otkupa s financijskim izvještajem
+- [x] Email integracija (Brevo API)
 
 ---
 
@@ -55,11 +56,12 @@ _Last updated: October 2025_
 
 ## MVP — 📑 Custom Orders
 - [x] Definiran proces: outsourced vs in-house
-- [ ] SQL tablica i backend funkcije
-- [ ] Forma za unos narudžbi (materijal, model, opis)
-- [ ] Statusi: zaprimljeno / u izradi / gotovo / isporučeno
-- [ ] Veza sa skladištem i proizvodnjom
-- [ ] Izvještaj aktivnih custom narudžbi
+- [x] SQL tablica i backend funkcije (fn_generate_work_order, fn_co_start, fn_co_ready, fn_co_delivered)
+- [x] Forma za unos narudžbi (materijal, model, opis)
+- [x] Statusi: zaprimljeno / u izradi / gotovo / isporučeno
+- [x] Email integracija i PDF generacija radnog naloga
+- [x] Veza sa skladištem i proizvodnjom
+- [ ] Izvještaj aktivnih custom narudžbi (u pripremi)
 
 ---
 
