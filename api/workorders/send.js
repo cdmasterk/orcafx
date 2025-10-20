@@ -85,11 +85,12 @@ async function sendEmail(to, pdfBase64, order_no) {
         <p>U privitku se nalazi vaš radni nalog <b>${order_no}</b>.</p>
         <p>Lijep pozdrav,<br>ORCAFX ERP sustav</p>
       `,
-      attachment: [
-        {
-          name: `${order_no}.pdf`,
-          content: pdfBase64,
-        },
+     attachment: [
+  {
+    name: `${order_no}.pdf`,
+    base64Content: pdfBase64,
+  },
+],
       ],
     }),
   });
