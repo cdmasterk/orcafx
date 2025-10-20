@@ -3,7 +3,8 @@ import fs from "fs";
 import path from "path";
 import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
-import { czs as supabase } from "../../lib/czsClient.js";
+import czsClient from "../../lib/czsClient.js";
+
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 
