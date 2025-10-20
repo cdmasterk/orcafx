@@ -1,19 +1,17 @@
 // /src/lib/czsClient.js
-// Minimalni stabilni helper koji sigurno radi u ESM okruženju (Vercel / Next.js)
-
 const czsClient = {
   log: async (message) => {
     try {
       console.log(`[CZS LOG] ${message}`);
     } catch (err) {
-      console.error("CZS log fallback:", err.message);
+      console.error("CZS LOG fallback:", err?.message || err);
     }
   },
   notify: async (subject, details) => {
     try {
-      console.log(`[CZS NOTIFY] ${subject} → ${details}`);
+      console.log(`[CZS NOTIFY] ${subject} -> ${details}`);
     } catch (err) {
-      console.error("CZS notify fallback:", err.message);
+      console.error("CZS NOTIFY fallback:", err?.message || err);
     }
   },
 };
