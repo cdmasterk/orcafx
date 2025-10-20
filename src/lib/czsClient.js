@@ -1,11 +1,21 @@
-// lib/czsClient.js
-import { createClient } from "@supabase/supabase-js";
+// /src/lib/czsClient.js
+// Minimalni stabilni helper koji sigurno radi u ESM okruženju (Vercel / Next.js)
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const czsClient = {
+  log: async (message) => {
+    try {
+      console.log(`[CZS LOG] ${message}`);
+    } catch (err) {
+      console.error("CZS log fallback:", err.message);
+    }
+  },
+  notify: async (subject, details) => {
+    try {
+      console.log(`[CZS NOTIFY] ${subject} → ${details}`);
+    } catch (err) {
+      console.error("CZS notify fallback:", err.message);
+    }
+  },
+};
 
-if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-  throw new Error("❌ Missing Supabase environment variables in czsClient.js");
-}
-
-export const czs = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+export default czsClient;

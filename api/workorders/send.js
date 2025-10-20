@@ -5,9 +5,9 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import nodemailer from "nodemailer";
 import { createClient } from "@supabase/supabase-js";
-import czsClient from "../../src/lib/czsClient.js"; // ✅ tvoj path
+import czsClient from "../../src/lib/czsClient.js"; // ✅ točan path
 
-// 🧩 Environment
+// ✅ Environment
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -23,24 +23,24 @@ export default async function handler(req, res) {
   try {
     const { workOrderId, customerEmail, customerName } = req.body;
 
-    // ✅ 1. Dohvati podatke iz točne tablice
+    // 1️⃣ Fetch iz točne tablice
     const { data: order, error } = await supabase
-      .from("work_orders") // ⬅️ ispravna tablica
+      .from("work_orders")
       .select("*")
       .eq("id", workOrderId)
       .single();
 
     if (error || !order) {
       await czsClient.log(`DB error: ${error?.message}`);
-      return res.status(400).json({ error: "❌ Nalog nije pronađen" });
+      return res.status(400).json({ error: "Nalog nije pronađen." });
     }
 
-    // ✅ 2. Generiraj PDF
+    // 2️⃣ PDF
     const pdfBytes = await generateWorkOrderPDF(order);
     const pdfPath = path.join("/tmp", `workorder_${order.repair_no}.pdf`);
     fs.writeFileSync(pdfPath, pdfBytes);
 
-    // ✅ 3. Upload u Supabase Storage
+    // 3️⃣ Upload u Supabase Storage
     const { error: uploadError } = await supabase.storage
       .from("pdfs")
       .upload(`workorders/${order.repair_no}.pdf`, fs.readFileSync(pdfPath), {
@@ -48,11 +48,9 @@ export default async function handler(req, res) {
         upsert: true,
       });
 
-    if (uploadError) {
-      await czsClient.log(`Upload error: ${uploadError.message}`);
-    }
+    if (uploadError) await czsClient.log(`Upload error: ${uploadError.message}`);
 
-    // ✅ 4. Pošalji mail
+    // 4️⃣ Slanje maila (Brevo)
     const transporter = nodemailer.createTransport({
       host: "smtp-relay.brevo.com",
       port: 587,
@@ -63,20 +61,21 @@ export default async function handler(req, res) {
       from: `"Goldschmiede Krizek" <${SMTP_USER}>`,
       to: customerEmail,
       subject: `Radni nalog #${order.repair_no}`,
-      text: `Poštovani ${customerName},\n\nVaš radni nalog (${order.description}) je spreman.\n\nSrdačan pozdrav,\nGoldschmiede Krizek`,
-      attachments: [
-        { filename: `radni_nalog_${order.repair_no}.pdf`, path: pdfPath },
-      ],
+      text: `Poštovani ${customerName},\n\nVaš nalog (${order.description}) je spreman.\n\nSrdačan pozdrav,\nGoldschmiede Krizek`,
+      attachments: [{ filename: `radni_nalog_${order.repair_no}.pdf`, path: pdfPath }],
     });
 
-    return res.status(200).json({ success: true, message: "✅ Mail poslan i PDF spremljen." });
+    await czsClient.log(`Mail poslan: ${order.repair_no}`);
+
+    return res.status(200).json({ success: true, message: "Mail poslan i PDF spremljen." });
   } catch (err) {
+    console.error("SERVER ERROR:", err);
     await czsClient.log(`Server error: ${err.message}`);
-    return res.status(500).json({ error: "⚠️ Greška na serveru" });
+    return res.status(500).json({ error: "Greška na serveru." });
   }
 }
 
-// 🧾 PDF generator
+// 🔹 PDF generator
 async function generateWorkOrderPDF(order) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
@@ -92,15 +91,15 @@ async function generateWorkOrderPDF(order) {
     `Datum: ${new Date(order.received_at).toLocaleDateString()}`,
   ];
 
-  lines.forEach((text, i) => {
+  lines.forEach((text, i) =>
     page.drawText(text, {
       x: 50,
       y: height - 60 - i * 25,
       size: 14,
       font,
       color: rgb(0, 0, 0),
-    });
-  });
+    })
+  );
 
   return await pdfDoc.save();
 }
