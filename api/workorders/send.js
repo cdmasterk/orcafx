@@ -1,143 +1,142 @@
-// /api/workorders/send.js
-import fs from "fs";
+// api/workorders/send.js
 import path from "path";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import fs from "fs";
+import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
-import nodemailer from "nodemailer";
-import { createClient } from "@supabase/supabase-js";
-import czsClient from "../../src/lib/czsClient.js"; // ← tvoj path
+import czsClient from "../../src/lib/czsClient.js";
 
-// --- Supabase client (server-side env) ---
-const SUPABASE_URL =
-  process.env.SUPABASE_URL ||
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  process.env.REACT_APP_SUPABASE_URL;
-
-const SUPABASE_ANON_KEY =
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  process.env.REACT_APP_SUPABASE_ANON_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error("Supabase env vars missing on server (SUPABASE_URL/ANON_KEY).");
-}
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// --- Storage bucket (fallback na 'pdfs') ---
-const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "pdfs";
-
-// --- SMTP (Brevo) ---
-const SMTP_HOST = process.env.SMTP_HOST || "smtp-relay.brevo.com";
-const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   try {
-    const { workOrderId, customerEmail, customerName } = req.body || {};
-    if (!workOrderId || !customerEmail) {
-      return res.status(400).json({ error: "Missing parameters: workOrderId, customerEmail" });
+    const { workOrderId, emailToSend } = req.body;
+    if (!workOrderId || !emailToSend) {
+      return res
+        .status(400)
+        .json({ error: "Missing parameters: workOrderId, emailToSend" });
     }
 
-    // 1) Dohvati nalog
-    const { data: order, error } = await supabase
-      .from("work_orders") // ← u tvojoj bazi je ovo ime
+    console.log("📩 Received payload:", { workOrderId, emailToSend });
+
+    // 1️⃣ Fetch Work Order
+    const { data: wo, error } = await czsClient
+      .from("work_orders")
       .select("*")
       .eq("id", workOrderId)
       .single();
 
-    if (error || !order) {
-      await czsClient.log(`DB error: ${error?.message || "not found"}`);
-      return res.status(400).json({ error: "Nalog nije pronađen." });
-    }
+    if (error || !wo) throw new Error("Work order not found");
 
-    // 2) Generiraj PDF u /tmp (Vercel)
-    const pdfBytes = await generateWorkOrderPDF(order);
-    const pdfPath = path.join("/tmp", `workorder_${order.repair_no || order.id}.pdf`);
-    fs.writeFileSync(pdfPath, pdfBytes);
+    // 2️⃣ Build PDF (unicode safe)
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.registerFontkit(fontkit);
 
-    // 3) Upload u Supabase Storage
-    const uploadKey = `workorders/${order.repair_no || order.id}.pdf`;
-    const { error: uploadError } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(uploadKey, fs.readFileSync(pdfPath), {
-        contentType: "application/pdf",
-        upsert: true,
+    // ✅ Unicode TTF font (npr. DejaVuSans)
+    const fontPath = path.resolve("./public/fonts/DejaVuSans.ttf");
+    const fontBytes = fs.readFileSync(fontPath);
+    const customFont = await pdfDoc.embedFont(fontBytes);
+
+    const page = pdfDoc.addPage([595.28, 841.89]); // A4
+    const { width } = page.getSize();
+    let y = 800;
+
+    const drawText = (label, val, offset = 180) => {
+      page.drawText(label, { x: 40, y, size: 12, font: customFont, color: rgb(0, 0, 0) });
+      page.drawText(String(val || "-"), {
+        x: offset,
+        y,
+        size: 12,
+        font: customFont,
+        color: rgb(0, 0, 0),
       });
+      y -= 18;
+    };
 
-    if (uploadError) {
-      await czsClient.log(`Upload error: ${uploadError.message}`);
-      // ne rušimo flow zbog uploada; mail svejedno ide
-    }
-
-    // 4) Slanje maila (Brevo SMTP)
-    if (!SMTP_USER || !SMTP_PASS) {
-      await czsClient.log("SMTP creds missing; cannot send email.");
-      return res.status(500).json({ error: "Mail greška: SMTP nije konfiguriran." });
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: false, // STARTTLS
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-      tls: { rejectUnauthorized: false },
+    page.drawText("RADNI NALOG / WORK ORDER", {
+      x: 40,
+      y: 820,
+      size: 16,
+      font: customFont,
+      color: rgb(0.1, 0.1, 0.1),
     });
 
-    await transporter.sendMail({
-      from: `"Goldschmiede Krizek" <${SMTP_USER}>`,
-      to: customerEmail,
-      subject: `Radni nalog #${order.repair_no || order.id}`,
-      text: `Poštovani ${customerName || ""},
+    drawText("Order no:", wo.order_no);
+    drawText("Customer:", wo.customer_name);
+    drawText("Email:", emailToSend);
+    drawText("Purity:", wo.purity);
+    drawText("Color:", wo.color);
+    drawText("Quantity:", wo.quantity);
+    drawText("Status:", wo.status);
+    y -= 20;
+    drawText("Created:", new Date().toLocaleString());
+    y -= 30;
 
-Vaš nalog je zaprimljen/obrađen.
+    page.drawText("Generated by ORCA System", {
+      x: 40,
+      y: 60,
+      size: 10,
+      font: customFont,
+      color: rgb(0.4, 0.4, 0.4),
+    });
 
-Opis: ${order.description || "-"}
+    const pdfBytes = await pdfDoc.save();
+    const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
 
-Srdačan pozdrav,
-Goldschmiede Krizek`,
-      attachments: [
-        { filename: `radni_nalog_${order.repair_no || order.id}.pdf`, path: pdfPath },
+    // 3️⃣ Send via Brevo
+    const payload = {
+      sender: { name: "ORCA Production", email: "noreply@orca.hr" },
+      to: [{ email: emailToSend }],
+      subject: `Radni nalog ${wo.order_no}`,
+      htmlContent: `<p>Poštovani,</p><p>U privitku se nalazi radni nalog <b>${wo.order_no}</b>.</p><p>Srdačan pozdrav,<br/>ORCA Team</p>`,
+      attachment: [
+        {
+          name: `${wo.order_no || "workorder"}.pdf`,
+          content: pdfBase64,
+        },
       ],
+    };
+
+    const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": BREVO_API_KEY,
+      },
+      body: JSON.stringify(payload),
     });
 
-    await czsClient.log(`Mail poslan: ${order.repair_no || order.id}`);
+    if (!brevoRes.ok) {
+      const msg = await brevoRes.text();
+      throw new Error(`Brevo send failed: ${msg}`);
+    }
+
+    // 4️⃣ Log update
+    const logEntry = {
+      time: new Date().toISOString(),
+      recipient: emailToSend,
+      order_no: wo.order_no,
+    };
+    await czsClient
+      .from("work_orders")
+      .update({
+        email_log: [...(wo.email_log || []), logEntry],
+      })
+      .eq("id", wo.id);
+
     return res.status(200).json({
-      success: true,
-      message: "Mail poslan i PDF spremljen.",
-      storage_path: `${STORAGE_BUCKET}/${uploadKey}`,
+      ok: true,
+      mailed: true,
+      pdfBase64,
+      order_no: wo.order_no,
     });
   } catch (err) {
-    console.error("SERVER ERROR:", err);
-    await czsClient.log(`Server error: ${err.message}`);
-    return res.status(500).json({ error: "Greška na serveru." });
+    console.error("❌ send.js error:", err);
+    return res
+      .status(500)
+      .json({ error: err.message || "Server error", mailed: false });
   }
-}
-
-// --- PDF helper ---
-async function generateWorkOrderPDF(order) {
-  const pdfDoc = await PDFDocument.create();
-  pdfDoc.registerFontkit(fontkit);
-  const page = pdfDoc.addPage([595.28, 841.89]); // A4
-  const { height } = page.getSize();
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-  const lines = [
-    `Radni nalog #${order.repair_no || order.id}`,
-    `Kupac: ${order.customer_name || ""}`,
-    `Opis: ${order.description || ""}`,
-    `Status: ${order.status || ""}`,
-    `Datum: ${
-      order.received_at ? new Date(order.received_at).toLocaleDateString() : new Date().toLocaleDateString()
-    }`,
-  ];
-
-  lines.forEach((text, i) => {
-    page.drawText(text, { x: 50, y: height - 60 - i * 25, size: 14, font, color: rgb(0, 0, 0) });
-  });
-
-  return await pdfDoc.save();
 }
