@@ -5,12 +5,13 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import nodemailer from "nodemailer";
 import { createClient } from "@supabase/supabase-js";
-import czsClient from "../../src/lib/czsClient.js"; // ✅ tvoj pravi path
+import czsClient from "../../src/lib/czsClient.js"; // ✅ tvoj path
 
-// 🔧 Environment
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 🧩 Environment
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 
@@ -22,24 +23,24 @@ export default async function handler(req, res) {
   try {
     const { workOrderId, customerEmail, customerName } = req.body;
 
-    // 1️⃣ Fetch order data from Supabase
+    // ✅ 1. Dohvati podatke iz točne tablice
     const { data: order, error } = await supabase
-      .from("workorders")
+      .from("work_orders") // ⬅️ ispravna tablica
       .select("*")
       .eq("id", workOrderId)
       .single();
 
     if (error || !order) {
       await czsClient.log(`DB error: ${error?.message}`);
-      return res.status(400).json({ error: "❌ Neuspješno dohvaćanje naloga" });
+      return res.status(400).json({ error: "❌ Nalog nije pronađen" });
     }
 
-    // 2️⃣ Generate PDF
+    // ✅ 2. Generiraj PDF
     const pdfBytes = await generateWorkOrderPDF(order);
     const pdfPath = path.join("/tmp", `workorder_${order.repair_no}.pdf`);
     fs.writeFileSync(pdfPath, pdfBytes);
 
-    // 3️⃣ Upload PDF to Supabase Storage
+    // ✅ 3. Upload u Supabase Storage
     const { error: uploadError } = await supabase.storage
       .from("pdfs")
       .upload(`workorders/${order.repair_no}.pdf`, fs.readFileSync(pdfPath), {
@@ -51,7 +52,7 @@ export default async function handler(req, res) {
       await czsClient.log(`Upload error: ${uploadError.message}`);
     }
 
-    // 4️⃣ Send email via Brevo SMTP
+    // ✅ 4. Pošalji mail
     const transporter = nodemailer.createTransport({
       host: "smtp-relay.brevo.com",
       port: 587,
@@ -62,7 +63,7 @@ export default async function handler(req, res) {
       from: `"Goldschmiede Krizek" <${SMTP_USER}>`,
       to: customerEmail,
       subject: `Radni nalog #${order.repair_no}`,
-      text: `Poštovani ${customerName},\n\nVaš nalog (${order.description}) je spreman.\n\nSrdačan pozdrav,\nGoldschmiede Krizek`,
+      text: `Poštovani ${customerName},\n\nVaš radni nalog (${order.description}) je spreman.\n\nSrdačan pozdrav,\nGoldschmiede Krizek`,
       attachments: [
         { filename: `radni_nalog_${order.repair_no}.pdf`, path: pdfPath },
       ],
@@ -75,7 +76,7 @@ export default async function handler(req, res) {
   }
 }
 
-// 🧾 Helper: Generate PDF
+// 🧾 PDF generator
 async function generateWorkOrderPDF(order) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
