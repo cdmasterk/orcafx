@@ -1,149 +1,128 @@
-import { createClient } from "@supabase/supabase-js";
+// api/workorders/send.js
+import fs from "fs";
+import path from "path";
 import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
+import { czs as supabase } from "../../lib/czsClient.js";
 
-// ✅ Env varijable iz Vercela
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
-const APP_BASE_URL =
-  process.env.APP_BASE_URL || "https://orcafx.vercel.app";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-// ✅ Dohvati radni nalog
-async function fetchWorkOrder(workOrderId) {
-  const { data, error } = await supabase
-    .from("work_orders")
-    .select(
-      `*, partners:partner_id ( partner_name, emails, type ), custom_orders:custom_order_id ( order_no, model )`
-    )
-    .eq("id", workOrderId)
-    .single();
+  try {
+    const { workOrderId } = req.body;
+    if (!workOrderId) throw new Error("Missing workOrderId");
 
-  if (error || !data) throw new Error("Work order not found in Supabase");
-  return data;
+    // 1️⃣ Dohvati radni nalog
+    const { data: wo, error } = await supabase
+      .from("work_orders")
+      .select(
+        "id, order_no, customer_name, customer_email, product_type, purity, color, quantity, status, partners"
+      )
+      .eq("id", workOrderId)
+      .single();
+
+    if (error || !wo) throw new Error(`Work order not found: ${workOrderId}`);
+
+    // 2️⃣ Izgradi PDF
+    const pdfBytes = await buildPdf(wo);
+
+    // 3️⃣ Pošalji e-mail
+    const mailResult = await sendBrevoEmail({ pdfBytes, wo });
+
+    // 4️⃣ Zapiši u bazu
+    await supabase.rpc("fn_log_email_result", {
+      p_work_order_id: workOrderId,
+      p_status: mailResult.sent ? "sent" : "failed",
+      p_message: mailResult.message || "No message",
+    });
+
+    return res.status(200).json({
+      success: true,
+      sent: mailResult.sent,
+      toList: mailResult.toList,
+    });
+  } catch (err) {
+    console.error("❌ send.js error:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
 }
 
-// ✅ QR image
-async function fetchQrPngBytes(url) {
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-    url
-  )}`;
-  const res = await fetch(qrUrl);
-  if (!res.ok) throw new Error("QR fetch failed");
-  return new Uint8Array(await res.arrayBuffer());
-}
-
-// ✅ PDF s unicode fontom (NotoSans)
+// 🧾 PDF Builder
 async function buildPdf(wo) {
   const pdfDoc = await PDFDocument.create();
-  pdfDoc.registerFontkit(fontkit); // 👈 ključni korak
+  pdfDoc.registerFontkit(fontkit);
 
-  const page = pdfDoc.addPage([595.28, 841.89]); // A4
+  const fontPath = path.resolve("./public/fonts/NotoSans-Regular.ttf");
+  const fontBytes = fs.readFileSync(fontPath);
+  const font = await pdfDoc.embedFont(fontBytes);
 
-  // Unicode-kompatibilni font (radi s ČĆŽŠĐ)
-  const fontUrl =
-    "https://github.com/google/fonts/raw/main/ofl/notosans/NotoSans-Regular.ttf";
-  const fontRes = await fetch(fontUrl);
-  const fontArrayBuffer = await fontRes.arrayBuffer();
-  const font = await pdfDoc.embedFont(new Uint8Array(fontArrayBuffer));
+  const page = pdfDoc.addPage([595, 842]); // A4
+  const { height } = page.getSize();
 
-  const { width } = page.getSize();
-  let y = 800;
+  page.drawText("Radni nalog", {
+    x: 50,
+    y: height - 80,
+    size: 20,
+    font,
+    color: rgb(0, 0, 0.6),
+  });
 
-  const drawText = (label, value, fontSize = 12) => {
-    page.drawText(`${label} ${value || "-"}`, {
-      x: 40,
-      y,
-      size: fontSize,
+  const lines = [
+    `Broj naloga: ${wo.order_no || "-"}`,
+    `Kupac: ${wo.customer_name || "-"}`,
+    `E-mail: ${wo.customer_email || "-"}`,
+    `Vrsta proizvoda: ${wo.product_type || "-"}`,
+    `Čistoća: ${wo.purity || "-"}`,
+    `Boja: ${wo.color || "-"}`,
+    `Količina: ${wo.quantity || 1}`,
+    `Status: ${wo.status || "-"}`,
+  ];
+
+  lines.forEach((line, i) => {
+    page.drawText(line, {
+      x: 50,
+      y: height - 130 - i * 25,
+      size: 12,
       font,
       color: rgb(0, 0, 0),
     });
-    y -= 18;
-  };
-
-  // Header
-  page.drawText("RADNI NALOG / WORK ORDER", {
-    x: 40,
-    y,
-    size: 16,
-    font,
-    color: rgb(0.1, 0.1, 0.1),
-  });
-  y -= 30;
-
-  drawText("Broj naloga:", wo.order_no);
-  drawText("Kupac:", wo.customer_name);
-  drawText("E-mail:", wo.customer_email);
-  drawText("Vrsta proizvoda:", wo.product_type);
-  drawText("Čistoća:", wo.purity);
-  drawText("Boja:", wo.color);
-  drawText("Model:", wo.model);
-  drawText("Količina:", wo.quantity);
-  drawText("Status:", wo.status);
-  drawText("Partner:", wo.partners?.partner_name || "—");
-
-  y -= 10;
-  page.drawText("Opis / Description:", { x: 40, y, size: 12, font });
-  y -= 18;
-  page.drawText(wo.description || "Nema opisa", { x: 60, y, size: 11, font });
-
-  // QR
-  const publicUrl = `${APP_BASE_URL}/orders/actions/${wo.custom_order_id}`;
-  const qrPng = await fetchQrPngBytes(publicUrl);
-  const qrImage = await pdfDoc.embedPng(qrPng);
-  page.drawImage(qrImage, {
-    x: width - 160,
-    y: 620,
-    width: 120,
-    height: 120,
-  });
-  page.drawText("Skeniraj za detalje", {
-    x: width - 160,
-    y: 610,
-    size: 10,
-    font,
-    color: rgb(0.4, 0.4, 0.4),
   });
 
-  // Footer
-  page.drawText("Generated by ORCA System", {
-    x: 40,
-    y: 40,
-    size: 9,
-    font,
-    color: rgb(0.5, 0.5, 0.5),
-  });
-
-  const pdfBytes = await pdfDoc.save();
-  return pdfBytes;
+  return await pdfDoc.save();
 }
 
-// ✅ Slanje maila preko Brevo
+// ✉️ Slanje maila
 async function sendBrevoEmail({ pdfBytes, wo }) {
+  const internal = (process.env.INTERNAL_PRODUCTION_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+
   const partnerEmails = Array.isArray(wo.partners?.emails)
     ? wo.partners.emails
     : [];
-  const internalList = (
-    process.env.INTERNAL_PRODUCTION_EMAILS || ""
-  )
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
 
-  const customer = wo.customer_email ? [wo.customer_email] : [];
-  const toList = [...new Set([...partnerEmails, ...internalList, ...customer])];
+  const toList = [
+    ...(wo.customer_email ? [wo.customer_email] : []),
+    ...partnerEmails,
+    ...internal,
+  ].filter(Boolean);
 
   if (toList.length === 0) {
-    return { sent: false, reason: "no recipients", toList };
+    return { sent: false, message: "No recipients found", toList };
   }
 
   const payload = {
     sender: { name: "ORCA Production", email: "noreply@orca.hr" },
     to: toList.map((email) => ({ email })),
     subject: `Radni nalog ${wo.order_no}`,
-    htmlContent: `<p>Poštovani,</p><p>U privitku se nalazi radni nalog <b>${wo.order_no}</b>.</p><p>Srdačan pozdrav,<br/>ORCA Production System</p>`,
+    htmlContent: `<p>Poštovani,</p>
+      <p>U privitku se nalazi radni nalog <b>${wo.order_no}</b>.</p>
+      <p>Srdačan pozdrav,<br/>ORCA Production System</p>`,
     attachment: [
       {
         name: `${wo.order_no || "workorder"}.pdf`,
@@ -162,48 +141,9 @@ async function sendBrevoEmail({ pdfBytes, wo }) {
   });
 
   if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`Brevo send error: ${res.status} ${txt}`);
+    const errTxt = await res.text();
+    return { sent: false, message: errTxt, toList };
   }
 
-  return { sent: true, toList };
-}
-
-// ✅ API handler
-export default async function handler(req, res) {
-  try {
-    if (req.method !== "POST")
-      return res.status(405).json({ error: "Only POST allowed" });
-
-    const { workOrderId } = req.body;
-    if (!workOrderId)
-      return res.status(400).json({ error: "workOrderId required" });
-
-    const wo = await fetchWorkOrder(workOrderId);
-    const pdfBytes = await buildPdf(wo);
-    const mailResult = await sendBrevoEmail({ pdfBytes, wo });
-
-    const newLogEntry = {
-      time: new Date().toISOString(),
-      result: mailResult,
-    };
-    const currentLog = Array.isArray(wo.email_log) ? wo.email_log : [];
-    const updatedLog = [...currentLog, newLogEntry];
-
-    await supabase
-      .from("work_orders")
-      .update({ email_log: updatedLog })
-      .eq("id", wo.id);
-
-    res.status(200).json({
-      ok: true,
-      mailed: mailResult,
-      workOrderId: wo.id,
-      order_no: wo.order_no,
-      pdfBase64: Buffer.from(pdfBytes).toString("base64"),
-    });
-  } catch (err) {
-    console.error("❌ send.js error:", err);
-    res.status(500).json({ error: err.message || "Server error" });
-  }
+  return { sent: true, message: "Email sent", toList };
 }

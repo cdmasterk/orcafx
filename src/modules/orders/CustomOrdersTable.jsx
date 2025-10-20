@@ -82,13 +82,13 @@ export default function CustomOrdersTable({ refreshKey }) {
     navigate(`/orders/upload/${id}`);
   };
 
-  // 🔹 Generiranje radnog naloga + potvrda i mail
+  // 🔹 Generiranje radnog naloga + potvrda i e-mail slanje
   const generateWorkOrder = async (id) => {
     try {
       const confirmGen = window.confirm("Želite li generirati Radni nalog?");
       if (!confirmGen) return;
 
-      // 1️⃣ Generiraj nalog u Supabaseu
+      // 1️⃣ Generiraj radni nalog u Supabaseu
       const { data, error } = await supabase.rpc("fn_generate_work_order", {
         p_order_id: id,
       });
@@ -96,18 +96,19 @@ export default function CustomOrdersTable({ refreshKey }) {
       const workOrderId = data;
       toast.success("✅ Radni nalog uspješno generiran!");
 
-      // 2️⃣ Dohvati e-mail kupca iz baze
-      const { data: orderRow } = await supabase
+      // 2️⃣ Dohvati e-mail kupca
+      const { data: orderRow, error: orderErr } = await supabase
         .from("custom_orders")
-        .select("customer_email")
+        .select("customer_email, order_no")
         .eq("id", id)
         .single();
 
-      const existingEmail = orderRow?.customer_email || "";
-      let shouldSend = false;
-      let emailToSend = existingEmail;
+      if (orderErr) throw orderErr;
 
-      // Popup potvrda
+      const existingEmail = orderRow?.customer_email || "";
+      let emailToSend = existingEmail;
+      let shouldSend = false;
+
       if (existingEmail) {
         shouldSend = window.confirm(
           `Želite li poslati radni nalog e-mailom kupcu?\n(${existingEmail})`
@@ -126,38 +127,37 @@ export default function CustomOrdersTable({ refreshKey }) {
         return;
       }
 
-      // 3️⃣ Ako je novi mail — ažuriraj ga u bazi
+      // 3️⃣ Ažuriraj e-mail ako je unesena nova adresa
       if (emailToSend && emailToSend !== existingEmail) {
-        await supabase
+        const { error: updErr } = await supabase
           .from("custom_orders")
           .update({ customer_email: emailToSend })
           .eq("id", id);
+        if (updErr) console.warn("⚠️ Greška kod ažuriranja e-maila:", updErr);
       }
 
-      // 4️⃣ Slanje maila i PDF-a kroz API /api/workorders/send
+      // 4️⃣ Pošalji e-mail s nalogom
       toast.info("📨 Slanje naloga e-mailom...");
 
       const resp = await fetch("/api/workorders/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workOrderId, emailToSend }),
+        body: JSON.stringify({ workOrderId }),
       });
 
-      if (!resp.ok) throw new Error("Mail slanje nije uspjelo");
       const result = await resp.json();
-
-      if (result.ok) {
-        toast.success(`📬 Nalog poslan na ${emailToSend}`);
-
-        // PDF auto-download ako je vraćen
-        if (result.pdfBase64) {
-          const link = document.createElement("a");
-          link.href = `data:application/pdf;base64,${result.pdfBase64}`;
-          link.download = `${result.order_no || workOrderId}.pdf`;
-          link.click();
-        }
+      if (!resp.ok || !result.success) {
+        toast.error(`⚠️ Mail slanje nije uspjelo: ${result.error || ""}`);
       } else {
-        toast.warn("⚠️ Nalog kreiran, ali e-mail nije poslan.");
+        toast.success(`📬 Nalog poslan na ${emailToSend}`);
+      }
+
+      // 5️⃣ PDF auto-download ako API vrati base64
+      if (result.pdfBase64) {
+        const link = document.createElement("a");
+        link.href = `data:application/pdf;base64,${result.pdfBase64}`;
+        link.download = `${orderRow.order_no || workOrderId}.pdf`;
+        link.click();
       }
 
       load();
@@ -221,7 +221,11 @@ export default function CustomOrdersTable({ refreshKey }) {
                 <td>
                   <OrderStatusBadge status={r.status} />
                 </td>
-                <td>{r.due_date ? new Date(r.due_date).toLocaleString() : "-"}</td>
+                <td>
+                  {r.due_date
+                    ? new Date(r.due_date).toLocaleString()
+                    : "-"}
+                </td>
                 <td>{new Date(r.created_at).toLocaleString()}</td>
 
                 {/* Akcije */}
