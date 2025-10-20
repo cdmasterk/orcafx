@@ -1,10 +1,10 @@
-// api/workorders/send.js
 import fs from "fs";
 import path from "path";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { createClient } from "@supabase/supabase-js";
 
+// 🔑 Environment
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
@@ -14,8 +14,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 // 📂 Font path
 const FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
 
-// 🧾 Build PDF
+// 🧾 PDF Builder
 async function buildPdf(order) {
+  console.log("🧾 Building PDF for order:", order.order_no);
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
 
@@ -63,8 +64,9 @@ async function buildPdf(order) {
   return pdfBytes.toString("base64");
 }
 
-// ✉️ Send email via Brevo
+// ✉️ Brevo Mail Sender
 async function sendEmail(to, pdfBase64, order_no) {
+  console.log("📤 Sending email to:", to, "for order:", order_no);
   if (!BREVO_API_KEY) throw new Error("Missing BREVO_API_KEY");
 
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -93,26 +95,34 @@ async function sendEmail(to, pdfBase64, order_no) {
   });
 
   const text = await res.text();
+  console.log("📩 Brevo raw response:", text);
+
   if (!res.ok) throw new Error(`Brevo error: ${text}`);
   return JSON.parse(text);
 }
 
-// 🧠 Main handler
+// 🚀 Handler
 export default async function handler(req, res) {
-  if (req.method !== "POST")
+  if (req.method !== "POST") {
+    console.warn("⚠️ Invalid request method:", req.method);
     return res.status(405).json({ error: "Method not allowed" });
+  }
 
-  const { workOrderId, emailToSend } = req.body;
+  console.log("📨 send.js triggered:", req.body);
+
+  const { workOrderId, emailToSend } = req.body || {};
+  console.log("🔹 workOrderId:", workOrderId);
+  console.log("🔹 emailToSend:", emailToSend);
 
   if (!workOrderId || !emailToSend) {
     console.error("❌ Missing parameters:", { workOrderId, emailToSend });
-    return res.status(400).json({ ok: false, error: "Missing parameters: workOrderId, emailToSend" });
+    return res
+      .status(400)
+      .json({ ok: false, error: "Missing parameters: workOrderId, emailToSend" });
   }
 
   try {
-    console.log("📨 Starting email send process for order:", workOrderId);
-
-    // 🔹 Fetch Work Order data
+    console.log("🔍 Fetching order from Supabase...");
     const { data: order, error } = await supabase
       .from("work_orders")
       .select("*")
@@ -120,15 +130,18 @@ export default async function handler(req, res) {
       .single();
 
     if (error || !order) throw new Error("Work order not found in database");
+    console.log("✅ Order found:", order.order_no);
 
-    // 🔹 Generate PDF
+    // 📄 Generate PDF
     const pdfBase64 = await buildPdf(order);
+    console.log("🧾 PDF generated successfully, size:", pdfBase64.length, "bytes");
 
-    // 🔹 Send email
+    // 📧 Send email
     const result = await sendEmail(emailToSend, pdfBase64, order.order_no);
+    console.log("✅ Mail sent successfully via Brevo:", result?.messageId || "no id");
 
-    // 🔹 Log success
-    await supabase.rpc("fn_wo_log_email", {
+    // 💾 Log success to Supabase
+    const { error: logErr } = await supabase.rpc("fn_wo_log_email", {
       p_work_order_id: workOrderId,
       p_to: emailToSend,
       p_status: "SENT",
@@ -137,12 +150,14 @@ export default async function handler(req, res) {
       p_payload: result ?? {},
     });
 
-    console.log("✅ Mail sent successfully to:", emailToSend);
+    if (logErr) console.warn("⚠️ Logging RPC failed:", logErr.message);
+    else console.log("🧾 Email log saved in database");
+
     return res.status(200).json({ ok: true, result });
   } catch (e) {
     console.error("❌ send.js error:", e.message);
 
-    // 🔹 Log fail
+    // 🚨 Fallback log
     try {
       await supabase.rpc("fn_wo_log_email", {
         p_work_order_id: workOrderId,
@@ -152,6 +167,7 @@ export default async function handler(req, res) {
         p_error: e.message?.slice(0, 300) || "unknown",
         p_payload: {},
       });
+      console.log("⚠️ Logged email failure to database.");
     } catch (err2) {
       console.warn("⚠️ Could not log email error:", err2.message);
     }
