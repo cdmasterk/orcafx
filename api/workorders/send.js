@@ -1,13 +1,19 @@
-// api/workorders/send.js
+// /api/workorders/send.js
 import fs from "fs";
 import path from "path";
 import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import czsClient from "../../src/lib/czsClient.js";
+import { createClient } from "@supabase/supabase-js";
+import nodemailer from "nodemailer";
 
-
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -15,137 +21,117 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { workOrderId } = req.body;
-    if (!workOrderId) throw new Error("Missing workOrderId");
+    const { workOrderId, customerEmail, customerName, description } = req.body;
 
-    // 1️⃣ Dohvati radni nalog
-    const { data: wo, error } = await supabase
-      .from("work_orders")
-      .select(
-        "id, order_no, customer_name, customer_email, product_type, purity, color, quantity, status, partners"
-      )
+    // 1️⃣ Fetch order data
+    const { data: orderData, error: orderError } = await supabase
+      .from("workorders")
+      .select("*")
       .eq("id", workOrderId)
       .single();
 
-    if (error || !wo) throw new Error(`Work order not found: ${workOrderId}`);
+    if (orderError) {
+      console.error(orderError);
+      return res.status(400).json({ error: "❌ Neuspješno dohvaćanje naloga" });
+    }
 
-    // 2️⃣ Izgradi PDF
-    const pdfBytes = await buildPdf(wo);
+    // 2️⃣ Generate PDF
+    const pdfBytes = await generateWorkOrderPDF(orderData);
 
-    // 3️⃣ Pošalji e-mail
-    const mailResult = await sendBrevoEmail({ pdfBytes, wo });
+    // 3️⃣ Save PDF locally (tmp)
+    const pdfPath = path.join("/tmp", `workorder_${workOrderId}.pdf`);
+    fs.writeFileSync(pdfPath, pdfBytes);
 
-    // 4️⃣ Zapiši u bazu
-    await supabase.rpc("fn_log_email_result", {
-      p_work_order_id: workOrderId,
-      p_status: mailResult.sent ? "sent" : "failed",
-      p_message: mailResult.message || "No message",
+    // 4️⃣ Upload to Supabase storage (folder: workorders)
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("pdfs")
+      .upload(`workorders/${workOrderId}.pdf`, fs.readFileSync(pdfPath), {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error(uploadError);
+      return res.status(500).json({ error: "❌ Neuspješno spremanje PDF-a" });
+    }
+
+    // 5️⃣ Send email via Brevo SMTP
+    const transporter = nodemailer.createTransport({
+      host: "smtp-relay.brevo.com",
+      port: 587,
+      auth: {
+        user: SMTP_USER,
+        pass: SMTP_PASS,
+      },
     });
 
-    return res.status(200).json({
-      success: true,
-      sent: mailResult.sent,
-      toList: mailResult.toList,
-    });
+    const mailOptions = {
+      from: `"Goldschmiede Krizek" <${SMTP_USER}>`,
+      to: customerEmail,
+      subject: `Radni nalog #${orderData.repair_no}`,
+      text: `Poštovani ${customerName},\n\nVaš radni nalog je spreman.\nOpis: ${description}\n\nSrdačan pozdrav,\nGoldschmiede Krizek`,
+      attachments: [
+        {
+          filename: `radni_nalog_${orderData.repair_no}.pdf`,
+          path: pdfPath,
+        },
+      ],
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ message: "✅ Mail poslan i PDF spremljen" });
   } catch (err) {
-    console.error("❌ send.js error:", err);
-    return res.status(500).json({ success: false, error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "⚠️ Greška na serveru" });
   }
 }
 
-// 🧾 PDF Builder
-async function buildPdf(wo) {
+// 🔹 Helper function to generate PDF
+async function generateWorkOrderPDF(order) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
+  const page = pdfDoc.addPage([595.28, 841.89]); // A4
+  const { width, height } = page.getSize();
 
-  const fontPath = path.resolve("./public/fonts/NotoSans-Regular.ttf");
-  const fontBytes = fs.readFileSync(fontPath);
-  const font = await pdfDoc.embedFont(fontBytes);
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  const page = pdfDoc.addPage([595, 842]); // A4
-  const { height } = page.getSize();
-
-  page.drawText("Radni nalog", {
+  page.drawText(`Radni Nalog #${order.repair_no}`, {
     x: 50,
-    y: height - 80,
+    y: height - 60,
     size: 20,
     font,
-    color: rgb(0, 0, 0.6),
+    color: rgb(0, 0, 0),
   });
 
-  const lines = [
-    `Broj naloga: ${wo.order_no || "-"}`,
-    `Kupac: ${wo.customer_name || "-"}`,
-    `E-mail: ${wo.customer_email || "-"}`,
-    `Vrsta proizvoda: ${wo.product_type || "-"}`,
-    `Čistoća: ${wo.purity || "-"}`,
-    `Boja: ${wo.color || "-"}`,
-    `Količina: ${wo.quantity || 1}`,
-    `Status: ${wo.status || "-"}`,
-  ];
-
-  lines.forEach((line, i) => {
-    page.drawText(line, {
-      x: 50,
-      y: height - 130 - i * 25,
-      size: 12,
-      font,
-      color: rgb(0, 0, 0),
-    });
+  page.drawText(`Kupac: ${order.customer_name || ""}`, {
+    x: 50,
+    y: height - 100,
+    size: 14,
+    font,
   });
 
-  return await pdfDoc.save();
-}
-
-// ✉️ Slanje maila
-async function sendBrevoEmail({ pdfBytes, wo }) {
-  const internal = (process.env.INTERNAL_PRODUCTION_EMAILS || "")
-    .split(",")
-    .map((e) => e.trim())
-    .filter(Boolean);
-
-  const partnerEmails = Array.isArray(wo.partners?.emails)
-    ? wo.partners.emails
-    : [];
-
-  const toList = [
-    ...(wo.customer_email ? [wo.customer_email] : []),
-    ...partnerEmails,
-    ...internal,
-  ].filter(Boolean);
-
-  if (toList.length === 0) {
-    return { sent: false, message: "No recipients found", toList };
-  }
-
-  const payload = {
-    sender: { name: "ORCA Production", email: "noreply@orca.hr" },
-    to: toList.map((email) => ({ email })),
-    subject: `Radni nalog ${wo.order_no}`,
-    htmlContent: `<p>Poštovani,</p>
-      <p>U privitku se nalazi radni nalog <b>${wo.order_no}</b>.</p>
-      <p>Srdačan pozdrav,<br/>ORCA Production System</p>`,
-    attachment: [
-      {
-        name: `${wo.order_no || "workorder"}.pdf`,
-        content: Buffer.from(pdfBytes).toString("base64"),
-      },
-    ],
-  };
-
-  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "api-key": BREVO_API_KEY,
-    },
-    body: JSON.stringify(payload),
+  page.drawText(`Opis: ${order.description || ""}`, {
+    x: 50,
+    y: height - 130,
+    size: 12,
+    font,
   });
 
-  if (!res.ok) {
-    const errTxt = await res.text();
-    return { sent: false, message: errTxt, toList };
-  }
+  page.drawText(`Status: ${order.status || "PENDING"}`, {
+    x: 50,
+    y: height - 160,
+    size: 12,
+    font,
+  });
 
-  return { sent: true, message: "Email sent", toList };
+  page.drawText(`Datum: ${new Date(order.received_at).toLocaleDateString()}`, {
+    x: 50,
+    y: height - 190,
+    size: 12,
+    font,
+  });
+
+  const pdfBytes = await pdfDoc.save();
+  return pdfBytes;
 }
