@@ -14,7 +14,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 // 📂 Font path
 const FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
 
-// ✅ Build PDF
+// 🧾 Build PDF
 async function buildPdf(order) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
@@ -32,10 +32,6 @@ async function buildPdf(order) {
 
   const page = pdfDoc.addPage([595, 842]);
   const { height } = page.getSize();
-
-  const draw = (label, value, y) => {
-    page.drawText(`${label}: ${value || "-"}`, { x: 50, y, size: 12, font });
-  };
 
   page.drawText("🔧 RADNI NALOG", {
     x: 50,
@@ -59,7 +55,7 @@ async function buildPdf(order) {
   ];
 
   for (const [label, val] of fields) {
-    draw(label, val, y);
+    page.drawText(`${label}: ${val || "-"}`, { x: 50, y, size: 12, font });
     y -= 22;
   }
 
@@ -67,8 +63,10 @@ async function buildPdf(order) {
   return pdfBytes.toString("base64");
 }
 
-// ✅ Send email via Brevo
+// ✉️ Send email via Brevo
 async function sendEmail(to, pdfBase64, order_no) {
+  if (!BREVO_API_KEY) throw new Error("Missing BREVO_API_KEY");
+
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
@@ -80,9 +78,11 @@ async function sendEmail(to, pdfBase64, order_no) {
       sender: { email: "noreply@orcafx.app", name: "ORCAFX ERP" },
       to: [{ email: to }],
       subject: `Radni nalog ${order_no}`,
-      htmlContent: `<p>Poštovani,</p>
-                    <p>U privitku se nalazi vaš radni nalog <b>${order_no}</b>.</p>
-                    <p>Lijep pozdrav,<br>ORCAFX ERP sustav</p>`,
+      htmlContent: `
+        <p>Poštovani,</p>
+        <p>U privitku se nalazi vaš radni nalog <b>${order_no}</b>.</p>
+        <p>Lijep pozdrav,<br>ORCAFX ERP sustav</p>
+      `,
       attachment: [
         {
           name: `${order_no}.pdf`,
@@ -97,18 +97,20 @@ async function sendEmail(to, pdfBase64, order_no) {
   return JSON.parse(text);
 }
 
-// ✅ Main handler
+// 🧠 Main handler
 export default async function handler(req, res) {
   if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
 
-  try {
-    const { workOrderId, emailToSend } = req.body;
+  const { workOrderId, emailToSend } = req.body;
 
-    if (!workOrderId || !emailToSend)
-      return res
-        .status(400)
-        .json({ error: "Missing parameters: workOrderId or emailToSend" });
+  if (!workOrderId || !emailToSend) {
+    console.error("❌ Missing parameters:", { workOrderId, emailToSend });
+    return res.status(400).json({ ok: false, error: "Missing parameters: workOrderId, emailToSend" });
+  }
+
+  try {
+    console.log("📨 Starting email send process for order:", workOrderId);
 
     // 🔹 Fetch Work Order data
     const { data: order, error } = await supabase
@@ -117,12 +119,12 @@ export default async function handler(req, res) {
       .eq("id", workOrderId)
       .single();
 
-    if (error || !order) throw new Error("Work order not found");
+    if (error || !order) throw new Error("Work order not found in database");
 
     // 🔹 Generate PDF
     const pdfBase64 = await buildPdf(order);
 
-    // 🔹 Send mail
+    // 🔹 Send email
     const result = await sendEmail(emailToSend, pdfBase64, order.order_no);
 
     // 🔹 Log success
@@ -135,24 +137,21 @@ export default async function handler(req, res) {
       p_payload: result ?? {},
     });
 
-    console.log("✅ Mail sent to", emailToSend);
-    return res.status(200).json({ ok: true, result, pdfBase64 });
+    console.log("✅ Mail sent successfully to:", emailToSend);
+    return res.status(200).json({ ok: true, result });
   } catch (e) {
-    console.error("❌ send.js error:", e);
+    console.error("❌ send.js error:", e.message);
 
     // 🔹 Log fail
     try {
-      const { workOrderId, emailToSend } = req.body || {};
-      if (workOrderId && emailToSend) {
-        await supabase.rpc("fn_wo_log_email", {
-          p_work_order_id: workOrderId,
-          p_to: emailToSend,
-          p_status: "FAILED",
-          p_provider_id: null,
-          p_error: e.message?.slice(0, 300) || "unknown",
-          p_payload: {},
-        });
-      }
+      await supabase.rpc("fn_wo_log_email", {
+        p_work_order_id: workOrderId,
+        p_to: emailToSend,
+        p_status: "FAILED",
+        p_provider_id: null,
+        p_error: e.message?.slice(0, 300) || "unknown",
+        p_payload: {},
+      });
     } catch (err2) {
       console.warn("⚠️ Could not log email error:", err2.message);
     }
