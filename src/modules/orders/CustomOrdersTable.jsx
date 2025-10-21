@@ -14,20 +14,14 @@ export default function CustomOrdersTable({ refreshKey }) {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
 
-  // QR modal state
+  // QR modal
   const [showQR, setShowQR] = useState(false);
   const [qrFor, setQrFor] = useState(null);
 
-  const openQR = (orderId) => {
-    setQrFor(orderId);
-    setShowQR(true);
-  };
-  const closeQR = () => {
-    setShowQR(false);
-    setQrFor(null);
-  };
+  const openQR = (orderId) => { setQrFor(orderId); setShowQR(true); };
+  const closeQR = () => { setShowQR(false); setQrFor(null); };
 
-  // 🔹 Load all custom orders
+  // Load
   const load = async () => {
     setLoading(true);
     try {
@@ -60,7 +54,7 @@ export default function CustomOrdersTable({ refreshKey }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, refreshKey]);
 
-  // 🔹 Promjena statusa pomoću Supabase RPC funkcija
+  // Status actions
   const updateStatus = async (fnName, id, successMsg) => {
     try {
       const { error } = await supabase.rpc(fnName, { p_order_id: id });
@@ -82,61 +76,75 @@ export default function CustomOrdersTable({ refreshKey }) {
     navigate(`/orders/upload/${id}`);
   };
 
-  // 🔹 Generiranje radnog naloga + potvrda i mail
+  // -------- Generate WO + email / print --------
   const generateWorkOrder = async (id) => {
     try {
       const confirmGen = window.confirm("Želite li generirati Radni nalog?");
       if (!confirmGen) return;
 
-      // 1️⃣ Generiraj nalog u Supabaseu
-      const { data, error } = await supabase.rpc("fn_generate_work_order", {
-        p_order_id: id,
-      });
+      // 1) Generate WO (SQL funkcija)
+      const { data, error } = await supabase.rpc("fn_generate_work_order", { p_order_id: id });
       if (error) throw error;
       const workOrderId = data;
       toast.success("✅ Radni nalog uspješno generiran!");
 
-      // 2️⃣ Dohvati e-mail kupca iz baze
-      const { data: orderRow } = await supabase
+      // 2) Get customer_email
+      const { data: orderRow, error: selErr } = await supabase
         .from("custom_orders")
         .select("customer_email")
         .eq("id", id)
         .single();
-
+      if (selErr) throw selErr;
       const existingEmail = orderRow?.customer_email || "";
-      let shouldSend = false;
-      let emailToSend = existingEmail;
 
-      // Popup potvrda
-      if (existingEmail) {
-        shouldSend = window.confirm(
-          `Želite li poslati radni nalog e-mailom kupcu?\n(${existingEmail})`
-        );
-      } else {
-        const input = window.prompt("Unesite e-mail adresu kupca za slanje:");
-        if (input && input.includes("@")) {
-          emailToSend = input.trim();
-          shouldSend = true;
+      // 3) Ask: print only?
+      const printOnly = window.confirm("Želite li SAMO ispis PDF-a (bez slanja e-maila)?\nKliknite OK za ispis, Cancel za slanje na e-mail.");
+
+      if (printOnly) {
+        // Print-only: tražimo PDF i skidamo
+        const resp = await fetch("/api/workorders/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workOrderId, emailToSend: "printonly@local" }),
+        });
+        if (!resp.ok) throw new Error("PDF generiranje nije uspjelo");
+        const result = await resp.json();
+        if (result?.pdfBase64) {
+          const link = document.createElement("a");
+          link.href = `data:application/pdf;base64,${result.pdfBase64}`;
+          link.download = `${result.order_no || workOrderId}.pdf`;
+          link.click();
+          toast.success("🖨️ PDF preuzet (bez slanja e-maila).");
+        } else {
+          toast.warn("⚠️ PDF nije vraćen.");
         }
-      }
-
-      if (!shouldSend) {
-        toast.info("📤 Nalog kreiran bez slanja e-maila.");
         load();
         return;
       }
 
-      // 3️⃣ Ako je novi mail — ažuriraj ga u bazi
-      if (emailToSend && emailToSend !== existingEmail) {
-        await supabase
-          .from("custom_orders")
-          .update({ customer_email: emailToSend })
-          .eq("id", id);
+      // 4) Otherwise: ask/confirm email
+      let emailToSend = existingEmail;
+      if (existingEmail) {
+        const ok = window.confirm(`Poslati radni nalog kupcu na:\n${existingEmail} ?`);
+        if (!ok) {
+          toast.info("ℹ️ Slanje e-maila otkazano.");
+          load();
+          return;
+        }
+      } else {
+        const input = window.prompt("Unesite e-mail adresu kupca:");
+        if (!input || !input.includes("@")) {
+          toast.info("ℹ️ Nije unesen valjan e-mail. Nalog je kreiran bez slanja.");
+          load();
+          return;
+        }
+        emailToSend = input.trim();
+        // upiši u custom_orders
+        await supabase.from("custom_orders").update({ customer_email: emailToSend }).eq("id", id);
       }
 
-      // 4️⃣ Slanje maila i PDF-a kroz API /api/workorders/send
+      // 5) Send via API
       toast.info("📨 Slanje naloga e-mailom...");
-
       const resp = await fetch("/api/workorders/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -148,14 +156,6 @@ export default function CustomOrdersTable({ refreshKey }) {
 
       if (result.ok) {
         toast.success(`📬 Nalog poslan na ${emailToSend}`);
-
-        // PDF auto-download ako je vraćen
-        if (result.pdfBase64) {
-          const link = document.createElement("a");
-          link.href = `data:application/pdf;base64,${result.pdfBase64}`;
-          link.download = `${result.order_no || workOrderId}.pdf`;
-          link.click();
-        }
       } else {
         toast.warn("⚠️ Nalog kreiran, ali e-mail nije poslan.");
       }
@@ -210,76 +210,34 @@ export default function CustomOrdersTable({ refreshKey }) {
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
-                <td>
-                  <b>{r.order_no}</b>
-                </td>
+                <td><b>{r.order_no}</b></td>
                 <td>{r.customer_name || "-"}</td>
                 <td>{r.product_type || "-"}</td>
                 <td>{r.purity || "-"}</td>
                 <td>{r.color || "-"}</td>
                 <td>{r.quantity || 1}</td>
-                <td>
-                  <OrderStatusBadge status={r.status} />
-                </td>
+                <td><OrderStatusBadge status={r.status} /></td>
                 <td>{r.due_date ? new Date(r.due_date).toLocaleString() : "-"}</td>
                 <td>{new Date(r.created_at).toLocaleString()}</td>
 
-                {/* Akcije */}
-                <td
-                  className="actions"
-                  style={{
-                    display: "flex",
-                    gap: 6,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                  }}
-                >
-                  <button className="btn" onClick={() => openQR(r.id)}>
-                    🔳 QR
-                  </button>
-                  <button className="btn" onClick={() => handleView(r.id)}>
-                    👁️ View
-                  </button>
-                  <button className="btn" onClick={() => handleUpload(r.id)}>
-                    📷 Upload
-                  </button>
+                {/* Actions */}
+                <td className="actions" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <button className="btn" onClick={() => openQR(r.id)}>🔳 QR</button>
+                  <button className="btn" onClick={() => handleView(r.id)}>👁️ View</button>
+                  <button className="btn" onClick={() => handleUpload(r.id)}>📷 Upload</button>
 
                   {r.status === "PENDING" && (
-                    <button
-                      className="btn"
-                      onClick={() =>
-                        updateStatus("fn_co_start", r.id, "▶️ Startano")
-                      }
-                    >
-                      ▶️ Start
-                    </button>
+                    <button className="btn" onClick={() => updateStatus("fn_co_start", r.id, "▶️ Startano")}>▶️ Start</button>
                   )}
                   {r.status === "IN_PROGRESS" && (
-                    <button
-                      className="btn"
-                      onClick={() =>
-                        updateStatus("fn_co_ready", r.id, "✅ Ready")
-                      }
-                    >
-                      ✅ Ready
-                    </button>
+                    <button className="btn" onClick={() => updateStatus("fn_co_ready", r.id, "✅ Ready")}>✅ Ready</button>
                   )}
                   {r.status === "READY" && (
-                    <button
-                      className="btn"
-                      onClick={() =>
-                        updateStatus("fn_co_delivered", r.id, "📦 Delivered")
-                      }
-                    >
-                      📦 Delivered
-                    </button>
+                    <button className="btn" onClick={() => updateStatus("fn_co_delivered", r.id, "📦 Delivered")}>📦 Delivered</button>
                   )}
 
                   {r.status !== "DELIVERED" && (
-                    <button
-                      className="btn workorder"
-                      onClick={() => generateWorkOrder(r.id)}
-                    >
+                    <button className="btn workorder" onClick={() => generateWorkOrder(r.id)}>
                       📄 Generate Work Order
                     </button>
                   )}
@@ -288,9 +246,7 @@ export default function CustomOrdersTable({ refreshKey }) {
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={10} className="small">
-                  Nema zapisa
-                </td>
+                <td colSpan={10} className="small">Nema zapisa</td>
               </tr>
             )}
           </tbody>
@@ -301,4 +257,3 @@ export default function CustomOrdersTable({ refreshKey }) {
     </>
   );
 }
-
