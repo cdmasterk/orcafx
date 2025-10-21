@@ -1,30 +1,29 @@
+// api/workorders/send.js
 import fs from "fs";
 import path from "path";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { createClient } from "@supabase/supabase-js";
 
-// 🔑 Environment
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// 📂 Font path
+// FONT PATH
 const FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
 
-// 🧾 PDF Builder
+// Build PDF
 async function buildPdf(order) {
-  console.log("🧾 Building PDF for order:", order.order_no);
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
 
   let fontBytes;
   try {
     fontBytes = fs.readFileSync(FONT_PATH);
-  } catch (err) {
-    console.warn("⚠️ Font not found, using Helvetica fallback:", err.message);
+  } catch {
+    console.warn("Font not found, using Helvetica fallback");
   }
 
   const font = fontBytes
@@ -34,7 +33,7 @@ async function buildPdf(order) {
   const page = pdfDoc.addPage([595, 842]);
   const { height } = page.getSize();
 
-  page.drawText("🔧 RADNI NALOG", {
+  page.drawText("RADNI NALOG", {
     x: 50,
     y: height - 80,
     size: 24,
@@ -48,9 +47,9 @@ async function buildPdf(order) {
     ["Kupac", order.customer_name],
     ["Email", order.customer_email],
     ["Tip proizvoda", order.product_type],
-    ["Čistoća", order.purity],
+    ["Cistoca", order.purity],
     ["Boja", order.color],
-    ["Količina", order.quantity],
+    ["Kolicina", order.quantity],
     ["Status", order.status],
     ["Datum izrade", new Date().toLocaleString("hr-HR")],
   ];
@@ -64,9 +63,8 @@ async function buildPdf(order) {
   return pdfBytes.toString("base64");
 }
 
-// ✉️ Brevo Mail Sender
+// Send Email
 async function sendEmail(to, pdfBase64, order_no) {
-  console.log("📤 Sending email to:", to, "for order:", order_no);
   if (!BREVO_API_KEY) throw new Error("Missing BREVO_API_KEY");
 
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -81,49 +79,36 @@ async function sendEmail(to, pdfBase64, order_no) {
       to: [{ email: to }],
       subject: `Radni nalog ${order_no}`,
       htmlContent: `
-        <p>Poštovani,</p>
-        <p>U privitku se nalazi vaš radni nalog <b>${order_no}</b>.</p>
+        <p>Postovani,</p>
+        <p>U privitku se nalazi vas radni nalog <b>${order_no}</b>.</p>
         <p>Lijep pozdrav,<br>ORCAFX ERP sustav</p>
       `,
-     attachment: [
-  {
-    name: `${order_no}.pdf`,
-    base64Content: pdfBase64,
-  },
-],
+      attachment: [
+        {
+          name: `${order_no}.pdf`,
+          base64Content: pdfBase64,
+        },
       ],
     }),
   });
 
   const text = await res.text();
-  console.log("📩 Brevo raw response:", text);
-
   if (!res.ok) throw new Error(`Brevo error: ${text}`);
   return JSON.parse(text);
 }
 
-// 🚀 Handler
+// Handler
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    console.warn("⚠️ Invalid request method:", req.method);
+  if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  console.log("📨 send.js triggered:", req.body);
 
   const { workOrderId, emailToSend } = req.body || {};
-  console.log("🔹 workOrderId:", workOrderId);
-  console.log("🔹 emailToSend:", emailToSend);
-
-  if (!workOrderId || !emailToSend) {
-    console.error("❌ Missing parameters:", { workOrderId, emailToSend });
+  if (!workOrderId || !emailToSend)
     return res
       .status(400)
       .json({ ok: false, error: "Missing parameters: workOrderId, emailToSend" });
-  }
 
   try {
-    console.log("🔍 Fetching order from Supabase...");
     const { data: order, error } = await supabase
       .from("work_orders")
       .select("*")
@@ -131,18 +116,11 @@ export default async function handler(req, res) {
       .single();
 
     if (error || !order) throw new Error("Work order not found in database");
-    console.log("✅ Order found:", order.order_no);
 
-    // 📄 Generate PDF
     const pdfBase64 = await buildPdf(order);
-    console.log("🧾 PDF generated successfully, size:", pdfBase64.length, "bytes");
-
-    // 📧 Send email
     const result = await sendEmail(emailToSend, pdfBase64, order.order_no);
-    console.log("✅ Mail sent successfully via Brevo:", result?.messageId || "no id");
 
-    // 💾 Log success to Supabase
-    const { error: logErr } = await supabase.rpc("fn_wo_log_email", {
+    await supabase.rpc("fn_wo_log_email", {
       p_work_order_id: workOrderId,
       p_to: emailToSend,
       p_status: "SENT",
@@ -151,14 +129,9 @@ export default async function handler(req, res) {
       p_payload: result ?? {},
     });
 
-    if (logErr) console.warn("⚠️ Logging RPC failed:", logErr.message);
-    else console.log("🧾 Email log saved in database");
-
     return res.status(200).json({ ok: true, result });
   } catch (e) {
-    console.error("❌ send.js error:", e.message);
-
-    // 🚨 Fallback log
+    console.error("send.js error:", e.message);
     try {
       await supabase.rpc("fn_wo_log_email", {
         p_work_order_id: workOrderId,
@@ -168,11 +141,7 @@ export default async function handler(req, res) {
         p_error: e.message?.slice(0, 300) || "unknown",
         p_payload: {},
       });
-      console.log("⚠️ Logged email failure to database.");
-    } catch (err2) {
-      console.warn("⚠️ Could not log email error:", err2.message);
-    }
-
+    } catch {}
     return res.status(500).json({ ok: false, error: e.message });
   }
 }
