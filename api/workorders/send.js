@@ -4,23 +4,26 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { createClient } from "@supabase/supabase-js";
 
+// 🔑 Environment
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 
+// 🧩 Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// 🧾 PDF Builder
+// 🧾 PDF Builder (vercel-safe)
 async function buildPdf(order) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
 
   let fontBytes = null;
   try {
-    const fontUrl = new URL("../../public/fonts/NotoSans-Regular.ttf", import.meta.url);
-    fontBytes = await fetch(fontUrl).then((r) => r.arrayBuffer());
+    const fontPath = path.resolve("public/fonts/NotoSans-Regular.ttf");
+    const fsModule = await import("fs/promises");
+    fontBytes = await fsModule.readFile(fontPath);
   } catch (err) {
-    console.warn("⚠️ Font not found, using Helvetica fallback:", err.message);
+    console.warn("⚠️ Font not found or unreadable, using Helvetica:", err.message);
   }
 
   const font = fontBytes
@@ -30,7 +33,7 @@ async function buildPdf(order) {
   const page = pdfDoc.addPage([595, 842]);
   const { height } = page.getSize();
 
-  page.drawText("RADNI NALOG", {
+  page.drawText("🔧 RADNI NALOG", {
     x: 50,
     y: height - 80,
     size: 24,
@@ -44,9 +47,9 @@ async function buildPdf(order) {
     ["Kupac", order.customer_name],
     ["Email", order.customer_email],
     ["Tip proizvoda", order.product_type],
-    ["Cistoca", order.purity],
+    ["Čistoća", order.purity],
     ["Boja", order.color],
-    ["Kolicina", order.quantity],
+    ["Količina", order.quantity],
     ["Status", order.status],
     ["Datum izrade", new Date().toLocaleString("hr-HR")],
   ];
@@ -78,8 +81,8 @@ async function sendEmail(to, pdfBase64, order_no) {
       to: [{ email: to }],
       subject: `Radni nalog ${order_no}`,
       htmlContent: `
-        <p>Postovani,</p>
-        <p>U privitku se nalazi vas radni nalog <b>${order_no}</b>.</p>
+        <p>Poštovani,</p>
+        <p>U privitku se nalazi vaš radni nalog <b>${order_no}</b>.</p>
         <p>Lijep pozdrav,<br>ORCAFX ERP sustav</p>
       `,
       attachment: [
@@ -109,6 +112,7 @@ export default async function handler(req, res) {
       .json({ ok: false, error: "Missing parameters: workOrderId, emailToSend" });
 
   try {
+    console.log("📨 Fetching order from Supabase...");
     const { data: order, error } = await supabase
       .from("work_orders")
       .select("*")
@@ -117,9 +121,13 @@ export default async function handler(req, res) {
 
     if (error || !order) throw new Error("Work order not found in database");
 
+    // 📄 Generate PDF
     const pdfBase64 = await buildPdf(order);
+
+    // 📧 Send Email
     const result = await sendEmail(emailToSend, pdfBase64, order.order_no);
 
+    // 💾 Log Success
     await supabase.rpc("fn_wo_log_email", {
       p_work_order_id: workOrderId,
       p_to: emailToSend,
@@ -129,9 +137,11 @@ export default async function handler(req, res) {
       p_payload: result ?? {},
     });
 
+    console.log("✅ Mail sent successfully to:", emailToSend);
     return res.status(200).json({ ok: true, result });
   } catch (e) {
-    console.error("send.js error:", e.message);
+    console.error("❌ send.js error:", e.message);
+
     try {
       await supabase.rpc("fn_wo_log_email", {
         p_work_order_id: workOrderId,
@@ -141,7 +151,10 @@ export default async function handler(req, res) {
         p_error: e.message?.slice(0, 300) || "unknown",
         p_payload: {},
       });
-    } catch {}
+    } catch (err2) {
+      console.warn("⚠️ Could not log email error:", err2.message);
+    }
+
     return res.status(500).json({ ok: false, error: e.message });
   }
 }
