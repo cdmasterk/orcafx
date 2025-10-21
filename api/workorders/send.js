@@ -77,13 +77,13 @@ async function sendEmail(to, pdfBase64, order_no) {
       "api-key": BREVO_API_KEY,
     },
     body: JSON.stringify({
-      sender: { email: "noreply@orcafx.app", name: "ORCAFX ERP" },
+      sender: { email: "noreply@krizek.hr", name: "Goldschmiede Krizek" }, // ✅ Verified sender
       to: [{ email: to }],
       subject: `Radni nalog ${order_no}`,
       htmlContent: `
         <p>Poštovani,</p>
         <p>U privitku se nalazi vaš radni nalog <b>${order_no}</b>.</p>
-        <p>Lijep pozdrav,<br>ORCAFX ERP sustav</p>
+        <p>Lijep pozdrav,<br><b>Goldschmiede Krizek</b></p>
       `,
       attachment: [
         {
@@ -99,6 +99,7 @@ async function sendEmail(to, pdfBase64, order_no) {
   if (!res.ok) throw new Error(`Brevo error: ${text}`);
   return JSON.parse(text);
 }
+
 
 // 🚀 Main Handler
 export default async function handler(req, res) {

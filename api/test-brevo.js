@@ -13,7 +13,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         sender: { email: "noreply@krizek.hr", name: "ORCAFX ERP Test" },
-        to: [{ email: "kkrnjevi@gmail.com" }], // ⬅️ stavi svoj email za test
+        to: [{ email: "tvoj_email@domena.com" }], // ⬅️ stavi svoj email za test
         subject: "🔧 ORCAFX Brevo test",
         htmlContent: "<p>Ovo je test poruka sa Vercel servera.</p>",
       }),
