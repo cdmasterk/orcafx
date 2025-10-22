@@ -1,19 +1,18 @@
-// api/workorders/send.js
 import fs from "fs";
 import path from "path";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { createClient } from "@supabase/supabase-js";
 
-// 🔑 ENV
+// 🔑 ENV VARS
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
 
-// ───────────────────────────── Helpers ─────────────────────────────
+// ───────────────────────────── HELPERS ─────────────────────────────
 function formatDate(v) {
   if (!v) return "-";
   try {
@@ -25,9 +24,7 @@ function formatDate(v) {
 
 async function makeQRBuffer(text, sizePx = 90) {
   try {
-    const url = `https://api.qrserver.com/v1/create-qr-code/?size=${sizePx}x${sizePx}&data=${encodeURIComponent(
-      text
-    )}`;
+    const url = `https://api.qrserver.com/v1/create-qr-code/?size=${sizePx}x${sizePx}&data=${encodeURIComponent(text)}`;
     const resp = await fetch(url);
     const arr = await resp.arrayBuffer();
     return Buffer.from(arr);
@@ -63,7 +60,7 @@ async function buildPdf(order) {
 
   let y = height - 50;
 
-  // 🏢 COMPANY INFO HEADER
+  // 🏢 COMPANY INFO
   page.drawRectangle({
     x: 40,
     y: y - 80,
@@ -199,11 +196,9 @@ async function buildPdf(order) {
   }
   y -= 110;
 
-  // 🔲 QR
+  // 🔲 QR CODE
   try {
-    const qrPng = await makeQRBuffer(
-      `${order.company_name} | ${order.order_no || order.work_order_id}`
-    );
+    const qrPng = await makeQRBuffer(`${order.company_name} | ${order.order_no || order.work_order_id}`);
     if (qrPng) {
       const qrImg = await pdfDoc.embedPng(qrPng);
       page.drawImage(qrImg, { x: width - 130, y: 60, width: 80, height: 80 });
@@ -240,6 +235,7 @@ async function sendEmail(to, pdfBase64, order_no, company_name) {
       attachment: [{ name: `${order_no}.pdf`, base64Content: pdfBase64 }],
     }),
   });
+
   const txt = await res.text();
   if (!res.ok) throw new Error(`Brevo error: ${txt}`);
   return JSON.parse(txt);
@@ -247,6 +243,17 @@ async function sendEmail(to, pdfBase64, order_no, company_name) {
 
 // ───────────────────────────── HANDLER ─────────────────────────────
 export default async function handler(req, res) {
+  // ✅ CORS FIX (za orcafx.vercel.app)
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", "https://orcafx.vercel.app");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    return res.status(200).end();
+  }
+  res.setHeader("Access-Control-Allow-Origin", "https://orcafx.vercel.app");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
   if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
 
@@ -260,9 +267,9 @@ export default async function handler(req, res) {
       .select("*")
       .eq("work_order_id", workOrderId)
       .single();
-      console.log("🔍 ORDER LOADED:", order);
-console.log("🔍 SUPABASE ERROR:", error);
 
+    console.log("🔍 ORDER LOADED:", order);
+    console.log("🔍 SUPABASE ERROR:", error);
 
     if (error || !order) throw new Error("Work order not found");
 
@@ -271,12 +278,7 @@ console.log("🔍 SUPABASE ERROR:", error);
     if (emailToSend === "printonly@local")
       return res.status(200).json({ ok: true, pdfBase64 });
 
-    const result = await sendEmail(
-      emailToSend,
-      pdfBase64,
-      order.order_no,
-      order.company_name
-    );
+    const result = await sendEmail(emailToSend, pdfBase64, order.order_no, order.company_name);
 
     await supabase.rpc("fn_wo_log_email", {
       p_work_order_id: workOrderId,
