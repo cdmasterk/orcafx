@@ -14,7 +14,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 // 🗂 Font
 const FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
 
-// ---------- Helpers ----------
+// ───────────────────────────── Helpers ─────────────────────────────
 function formatDate(v) {
   if (!v) return "-";
   try {
@@ -51,7 +51,7 @@ async function makeQRBuffer(text, sizePx = 90) {
   }
 }
 
-// ---------- PDF BUILDER ----------
+// ───────────────────────────── PDF BUILDER ─────────────────────────────
 async function buildPdf(order, company) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
@@ -114,7 +114,7 @@ async function buildPdf(order, company) {
   y -= 20;
 
   // 👤 KUPAC
-  y = y - 10;
+  y -= 10;
   page.drawText("KUPAC", { x: 40, y, size: 13, font, color: blue });
   y -= 18;
   const cust = [
@@ -139,6 +139,8 @@ async function buildPdf(order, company) {
     ["Boja", order.color],
     ["Količina", order.quantity],
     ["Status", order.status],
+    ["Tip proizvoda", order.product_type],
+    ["Radionica", order.workshop_name],
   ];
   for (const [k, v] of specs) {
     draw(`${k}:`, 60, y);
@@ -201,7 +203,7 @@ async function buildPdf(order, company) {
   return Buffer.from(pdfBytes).toString("base64");
 }
 
-// ---------- Email ----------
+// ───────────────────────────── Email ─────────────────────────────
 async function sendEmail(to, pdfBase64, order_no) {
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -223,7 +225,7 @@ async function sendEmail(to, pdfBase64, order_no) {
   return JSON.parse(txt);
 }
 
-// ---------- API HANDLER ----------
+// ───────────────────────────── HANDLER ─────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
@@ -232,7 +234,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: "Missing parameters: workOrderId, emailToSend" });
 
   try {
-    // 1️⃣ Work order
+    // 1️⃣ Order (iz viewa)
     const { data: order, error: orderErr } = await supabase
       .from("work_order_full_view")
       .select("*")
@@ -243,18 +245,34 @@ export default async function handler(req, res) {
     // 2️⃣ Company
     const { data: company } = await supabase.from("company_profile").select("*").limit(1).single();
 
-    // 3️⃣ Generate PDF
+    // 3️⃣ Fallback: dopuni kategoriju, model i radionicu ako ih nema
+    if (!order.category || !order.model || !order.workshop_name) {
+      const { data: co } = await supabase
+        .from("custom_orders")
+        .select("category, model, workshop_name, product_type")
+        .eq("id", order.custom_order_id)
+        .maybeSingle();
+
+      if (co) {
+        order.category = order.category || co.category;
+        order.model = order.model || co.model;
+        order.workshop_name = order.workshop_name || co.workshop_name;
+        order.product_type = order.product_type || co.product_type;
+      }
+    }
+
+    // 4️⃣ Generate PDF
     const pdfBase64 = await buildPdf(order, company);
 
-    // 4️⃣ Print only mode
+    // 5️⃣ Print only
     if (emailToSend === "printonly@local") {
       return res.status(200).json({ ok: true, pdfBase64, order_no: order.order_no });
     }
 
-    // 5️⃣ Send mail
+    // 6️⃣ Send email
     const result = await sendEmail(emailToSend, pdfBase64, order.order_no);
 
-    // 6️⃣ Log result
+    // 7️⃣ Log
     await supabase.rpc("fn_wo_log_email", {
       p_work_order_id: workOrderId,
       p_to: emailToSend,
