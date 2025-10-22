@@ -5,13 +5,15 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { createClient } from "@supabase/supabase-js";
 
+// 🔑 ENV
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
 const FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
 
+// ───────────────────────────── Helpers ─────────────────────────────
 function formatDate(v) {
   if (!v) return "-";
   try {
@@ -34,7 +36,7 @@ async function makeQRBuffer(text, sizePx = 90) {
   }
 }
 
-// --------------------------- BUILD PDF ---------------------------
+// ───────────────────────────── PDF BUILDER ─────────────────────────────
 async function buildPdf(order) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
@@ -50,90 +52,88 @@ async function buildPdf(order) {
 
   const page = pdfDoc.addPage([595, 842]);
   const { width, height } = page.getSize();
+
   const blue = rgb(0, 0.44, 0.95);
-  const gray = rgb(0.3, 0.3, 0.3);
+  const gray = rgb(0.25, 0.25, 0.25);
   const lightGray = rgb(0.96, 0.96, 0.96);
   const borderGray = rgb(0.8, 0.8, 0.8);
 
   const draw = (txt, x, y, size = 11, color = rgb(0, 0, 0)) =>
     page.drawText(String(txt ?? "-"), { x, y, size, font, color });
 
-  let y = height - 40;
+  let y = height - 50;
 
-  // 🏢 COMPANY INFO
-  const company = order;
-  page.drawRectangle({
-    x: 40,
-    y: y - 70,
-    width: width - 80,
-    height: 60,
-    color: lightGray,
-    borderColor: borderGray,
-    borderWidth: 1,
-  });
-
-  draw(company.company_name || "Zlatarna Krizek", 50, y - 50, 14, blue);
-  draw(
-    [company.company_address, company.company_city, company.company_country]
-      .filter(Boolean)
-      .join(", "),
-    50,
-    y - 65,
-    10,
-    gray
-  );
-  draw(
-    [company.company_email, company.company_phone].filter(Boolean).join(" | "),
-    50,
-    y - 78,
-    9,
-    gray
-  );
-  y -= 90;
-
-  // 🔷 HEADER
-  page.drawRectangle({
-    x: 40,
-    y: y - 35,
-    width: width - 80,
-    height: 30,
-    color: blue,
-  });
-  draw(`RADNI NALOG ${order.order_no || order.work_order_id}`, 50, y - 18, 14, rgb(1, 1, 1));
-  y -= 55;
-
-  draw(`Datum narudžbe: ${formatDate(order.order_date)}`, 50, y, 10, gray);
-  draw(`Rok izrade: ${formatDate(order.due_date)}`, 330, y, 10, gray);
-  y -= 25;
-
-  // 👤 KUPAC
+  // 🏢 COMPANY INFO HEADER
   page.drawRectangle({
     x: 40,
     y: y - 80,
     width: width - 80,
-    height: 70,
+    height: 65,
     color: lightGray,
     borderColor: borderGray,
     borderWidth: 1,
   });
-  draw("KUPAC", 50, y - 10, 13, blue);
-  draw(`Ime: ${order.customer_name || "-"}`, 60, y - 25, 10, gray);
-  draw(`Email: ${order.customer_email || "-"}`, 60, y - 40, 10, gray);
-  draw(`Telefon: ${order.customer_phone || "-"}`, 60, y - 55, 10, gray);
-  y -= 95;
+  draw(order.company_name || "Zlatarna Krizek", 55, y - 50, 15, blue);
+  draw(
+    [order.company_address, order.company_city, order.company_country].filter(Boolean).join(", "),
+    55,
+    y - 66,
+    10,
+    gray
+  );
+  draw(
+    [order.company_email, order.company_phone].filter(Boolean).join(" | "),
+    55,
+    y - 78,
+    9,
+    gray
+  );
+  y -= 100;
 
-  // 📦 SPECIFIKACIJE
+  // 🔷 HEADER
   page.drawRectangle({
     x: 40,
-    y: y - 140,
+    y: y - 40,
+    width: width - 80,
+    height: 35,
+    color: blue,
+  });
+  draw(`RADNI NALOG ${order.order_no || order.work_order_id}`, 55, y - 22, 15, rgb(1, 1, 1));
+  y -= 60;
+
+  draw(`Datum narudžbe: ${formatDate(order.order_date)}`, 55, y, 10, gray);
+  draw(`Rok izrade: ${formatDate(order.due_date)}`, 330, y, 10, gray);
+  y -= 30;
+
+  // 👤 KUPAC
+  draw("KUPAC", 45, y, 13, blue);
+  y -= 15;
+  page.drawRectangle({
+    x: 40,
+    y: y - 80,
+    width: width - 80,
+    height: 65,
+    color: lightGray,
+    borderColor: borderGray,
+    borderWidth: 1,
+  });
+  draw(`Ime: ${order.customer_name || "-"}`, 55, y - 20, 10, gray);
+  draw(`Email: ${order.customer_email || "-"}`, 55, y - 35, 10, gray);
+  draw(`Telefon: ${order.customer_phone || "-"}`, 55, y - 50, 10, gray);
+  y -= 100;
+
+  // 📦 SPECIFIKACIJE
+  draw("SPECIFIKACIJE", 45, y, 13, blue);
+  y -= 15;
+  page.drawRectangle({
+    x: 40,
+    y: y - 145,
     width: width - 80,
     height: 130,
     color: lightGray,
     borderColor: borderGray,
     borderWidth: 1,
   });
-  draw("SPECIFIKACIJE", 50, y - 10, 13, blue);
-
   const specs = [
     ["Kategorija", order.category],
     ["Model", order.model],
@@ -145,30 +145,57 @@ async function buildPdf(order) {
     ["Vrsta proizvodnje", order.production_type],
   ];
   let yy = y - 25;
-  for (const [k, v] of specs) {
-    draw(`${k}: ${v ?? "-"}`, 60, yy, 10, gray);
+  for (const [label, val] of specs) {
+    draw(`${label}: ${val ?? "-"}`, 55, yy, 10, gray);
     yy -= 15;
   }
-  y -= 150;
+  y -= 165;
 
-  // 💬 NAPOMENE
+  // 💍 DETALJI
+  draw("DETALJI", 45, y, 13, blue);
+  y -= 15;
   page.drawRectangle({
     x: 40,
-    y: y - 100,
+    y: y - 145,
     width: width - 80,
-    height: 90,
+    height: 130,
     color: lightGray,
     borderColor: borderGray,
     borderWidth: 1,
   });
-  draw("NAPOMENE", 50, y - 10, 13, blue);
-  const lines = (order.additional_comment || order.notes || "-")
-    .split("\n")
-    .slice(0, 5);
-  let yText = y - 25;
+  const details = [
+    ["Veličina (muška)", order.male_size],
+    ["Veličina (ženska)", order.female_size],
+    ["Kamenje", order.stones],
+    ["Gravura 1", order.engraving_1],
+    ["Gravura 2", order.engraving_2],
+    ["Zajednička gravura", order.joint_engraving],
+  ];
+  let dy = y - 25;
+  for (const [label, val] of details) {
+    draw(`${label}: ${val ?? "-"}`, 55, dy, 10, gray);
+    dy -= 15;
+  }
+  y -= 165;
+
+  // 💬 NAPOMENE
+  draw("NAPOMENE", 45, y, 13, blue);
+  y -= 15;
+  page.drawRectangle({
+    x: 40,
+    y: y - 90,
+    width: width - 80,
+    height: 75,
+    color: lightGray,
+    borderColor: borderGray,
+    borderWidth: 1,
+  });
+  const notes = order.additional_comment || order.notes || "-";
+  const lines = notes.split("\n").slice(0, 5);
+  let nY = y - 25;
   for (const line of lines) {
-    draw(line, 60, yText, 10, gray);
-    yText -= 13;
+    draw(line, 55, nY, 10, gray);
+    nY -= 13;
   }
   y -= 110;
 
@@ -186,7 +213,7 @@ async function buildPdf(order) {
   // Footer
   draw(
     `Generated by ORCAFX • ${order.company_name || ""} • ${new Date().toLocaleString("hr-HR")}`,
-    50,
+    55,
     40,
     9,
     gray
@@ -196,7 +223,7 @@ async function buildPdf(order) {
   return Buffer.from(pdfBytes).toString("base64");
 }
 
-// --------------------------- SEND EMAIL ---------------------------
+// ───────────────────────────── EMAIL ─────────────────────────────
 async function sendEmail(to, pdfBase64, order_no, company_name) {
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -213,13 +240,12 @@ async function sendEmail(to, pdfBase64, order_no, company_name) {
       attachment: [{ name: `${order_no}.pdf`, base64Content: pdfBase64 }],
     }),
   });
-
   const txt = await res.text();
   if (!res.ok) throw new Error(`Brevo error: ${txt}`);
   return JSON.parse(txt);
 }
 
-// --------------------------- HANDLER ---------------------------
+// ───────────────────────────── HANDLER ─────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
@@ -242,7 +268,12 @@ export default async function handler(req, res) {
     if (emailToSend === "printonly@local")
       return res.status(200).json({ ok: true, pdfBase64 });
 
-    const result = await sendEmail(emailToSend, pdfBase64, order.order_no, order.company_name);
+    const result = await sendEmail(
+      emailToSend,
+      pdfBase64,
+      order.order_no,
+      order.company_name
+    );
 
     await supabase.rpc("fn_wo_log_email", {
       p_work_order_id: workOrderId,
