@@ -3,20 +3,76 @@ import fs from "fs";
 import path from "path";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
-import QRCode from "qrcode";
 import { createClient } from "@supabase/supabase-js";
 
-// 🔑 ENVIRONMENT
+// 🔑 ENV
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// 🗂 FONT PATH
+// 🗂 Font
 const FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
 
-// 🧾 BUILD PDF (Fiori-style)
+// ───────────────────────────────────────────────────────────────────────────────
+// Helpers
+function formatDate(v) {
+  if (!v) return "-";
+  try {
+    return new Date(v).toLocaleString("hr-HR");
+  } catch {
+    return String(v);
+  }
+}
+function section(page, font, title, y) {
+  page.drawText(title, { x: 40, y, size: 13, font, color: rgb(0, 0, 0) });
+  return y - 20;
+}
+function multiLine(page, font, text, x, y, size, maxWidth, leading) {
+  const words = String(text || "-").split(/\s+/);
+  let line = "";
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    const width = font.widthOfTextAtSize(test, size);
+    if (width > maxWidth) {
+      page.drawText(line, { x, y, size, font });
+      y -= leading;
+      line = w;
+    } else line = test;
+  }
+  if (line) page.drawText(line, { x, y, size, font });
+  return y - leading;
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// QR generator (with fallback, no dependency required)
+async function makeQRBuffer(text, sizePx = 80) {
+  // 1) Try dynamic import of 'qrcode' if it exists
+  let qrcode = null;
+  try {
+    // dynamic import avoids hard dependency at build-time
+    qrcode = await import("qrcode").then((m) => m.default || m).catch(() => null);
+  } catch {
+    qrcode = null;
+  }
+
+  if (qrcode && qrcode.toBuffer) {
+    return await qrcode.toBuffer(text, { width: sizePx });
+  }
+
+  // 2) Fallback to public QR service (PNG)
+  const url = `https://api.qrserver.com/v1/create-qr-code/?size=${sizePx}x${sizePx}&data=${encodeURIComponent(
+    text
+  )}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error("QR fetch failed");
+  const arr = await resp.arrayBuffer();
+  return Buffer.from(arr);
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// PDF builder (Fiori-style)
 async function buildPdf(order, company) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
@@ -36,19 +92,20 @@ async function buildPdf(order, company) {
   const draw = (txt, x, y, size = 11) =>
     page.drawText(String(txt ?? "-"), { x, y, size, font, color: rgb(0, 0, 0) });
 
-  // 🏢 HEADER — COMPANY INFO
+  // 🏢 Company header
   const companyName = company?.legal_name || "Zlatarna Krizek doo";
-  const address = [company?.address_line, company?.city, company?.country]
-    .filter(Boolean)
-    .join(", ");
+  const address = [company?.address_line, company?.city, company?.country].filter(Boolean).join(", ");
   let y = height - 40;
 
   if (company?.logo_url) {
     try {
       const buf = await fetch(company.logo_url).then((r) => r.arrayBuffer());
-      const img = company.logo_url.endsWith(".png")
-        ? await pdfDoc.embedPng(buf)
-        : await pdfDoc.embedJpg(buf);
+      let img;
+      try {
+        img = await pdfDoc.embedPng(buf);
+      } catch {
+        img = await pdfDoc.embedJpg(buf);
+      }
       page.drawImage(img, { x: 40, y: y - 32, width: 96, height: 32 });
     } catch (e) {
       console.warn("⚠️ Logo embed failed:", e.message);
@@ -61,14 +118,14 @@ async function buildPdf(order, company) {
   draw(`OIB: ${company?.tax_id || "-"}`, 160, y - 40, 10);
   y -= 60;
 
-  // 🧾 TITLE
+  // Title + dates
   draw(`RADNI NALOG ${order.order_no}`, 40, y, 18);
   y -= 24;
   draw(`Datum narudžbe: ${formatDate(order.order_date)}`, 40, y);
   draw(`Rok izrade: ${formatDate(order.due_date)}`, 300, y);
-  y -= 22;
+  y -= 18;
 
-  // SEPARATOR
+  // Separator
   page.drawLine({
     start: { x: 40, y },
     end: { x: width - 40, y },
@@ -77,7 +134,7 @@ async function buildPdf(order, company) {
   });
   y -= 20;
 
-  // 👤 CUSTOMER SECTION
+  // 👤 Customer
   y = section(page, font, "KUPAC", y);
   draw(`Ime: ${order.customer_name || "-"}`, 60, y);
   y -= 18;
@@ -86,7 +143,7 @@ async function buildPdf(order, company) {
   draw(`Telefon: ${order.customer_phone || "-"}`, 60, y);
   y -= 10;
 
-  // 📦 SPECIFIKACIJE
+  // 📦 Specifikacije
   y = section(page, font, "SPECIFIKACIJE", y);
   const specs = [
     ["Kategorija", order.category],
@@ -101,7 +158,7 @@ async function buildPdf(order, company) {
     y -= 18;
   }
 
-  // 💍 DETALJI
+  // 💍 Detalji
   y = section(page, font, "DETALJI", y);
   const details = [
     ["Veličina (muška)", order.male_size],
@@ -116,18 +173,21 @@ async function buildPdf(order, company) {
     y -= 18;
   }
 
-  // 💬 DODATNO
+  // 💬 Napomene
   y = section(page, font, "DODATNE NAPOMENE", y);
   y = multiLine(page, font, order.additional_comment ?? "-", 60, y, 11, 480, 16) - 8;
 
-  // 🖼️ SKICA (ako postoji)
+  // 🖼️ Skica
   if (order.sketch_url) {
     y = section(page, font, "SKICA", y);
     try {
       const buf = await fetch(order.sketch_url).then((r) => r.arrayBuffer());
-      const img = order.sketch_url.endsWith(".png")
-        ? await pdfDoc.embedPng(buf)
-        : await pdfDoc.embedJpg(buf);
+      let img;
+      try {
+        img = await pdfDoc.embedPng(buf);
+      } catch {
+        img = await pdfDoc.embedJpg(buf);
+      }
       page.drawImage(img, { x: 60, y: y - 180, width: 180, height: 180 });
       y -= 190;
     } catch {
@@ -136,55 +196,25 @@ async function buildPdf(order, company) {
     }
   }
 
-  // 🔲 QR CODE
-  const qrText = `${companyName} | ${order.order_no}`;
-  const qrPng = await QRCode.toBuffer(qrText, { width: 80 });
-  const qrImg = await pdfDoc.embedPng(qrPng);
-  page.drawImage(qrImg, { x: width - 120, y: 60, width: 60, height: 60 });
+  // 🔲 QR (no dependency fallback)
+  try {
+    const qrText = `${companyName} | ${order.order_no}`;
+    const qrPng = await makeQRBuffer(qrText, 80);
+    const qrImg = await pdfDoc.embedPng(qrPng);
+    page.drawImage(qrImg, { x: width - 120, y: 60, width: 60, height: 60 });
+  } catch (e) {
+    console.warn("⚠️ QR embed failed:", e.message);
+  }
 
-  // FOOTER
-  y -= 40;
-  draw(
-    `Generated by ORCAFX • ${companyName} • ${new Date().toLocaleString("hr-HR")}`,
-    40,
-    40,
-    9
-  );
+  // Footer
+  draw(`Generated by ORCAFX • ${companyName} • ${new Date().toLocaleString("hr-HR")}`, 40, 40, 9);
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes).toString("base64");
 }
 
-// 🧩 HELPERS
-function section(page, font, title, y) {
-  page.drawText(title, { x: 40, y, size: 13, font, color: rgb(0, 0, 0) });
-  return y - 20;
-}
-function formatDate(v) {
-  if (!v) return "-";
-  try {
-    return new Date(v).toLocaleString("hr-HR");
-  } catch {
-    return String(v);
-  }
-}
-function multiLine(page, font, text, x, y, size, maxWidth, leading) {
-  const words = String(text || "-").split(/\s+/);
-  let line = "";
-  for (const w of words) {
-    const test = line ? `${line} ${w}` : w;
-    const width = font.widthOfTextAtSize(test, size);
-    if (width > maxWidth) {
-      page.drawText(line, { x, y, size, font });
-      y -= leading;
-      line = w;
-    } else line = test;
-  }
-  if (line) page.drawText(line, { x, y, size, font });
-  return y - leading;
-}
-
-// 📧 BREVO MAIL SENDER
+// ───────────────────────────────────────────────────────────────────────────────
+// Brevo
 async function sendEmail(to, pdfBase64, order_no) {
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -206,17 +236,17 @@ async function sendEmail(to, pdfBase64, order_no) {
   return JSON.parse(txt);
 }
 
-// 🚀 MAIN HANDLER
+// ───────────────────────────────────────────────────────────────────────────────
+// Handler
 export default async function handler(req, res) {
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const { workOrderId, emailToSend } = req.body || {};
   if (!workOrderId || !emailToSend)
-    return res.status(400).json({ ok: false, error: "Missing parameters" });
+    return res.status(400).json({ ok: false, error: "Missing parameters: workOrderId, emailToSend" });
 
   try {
-    // 1️⃣ Fetch Work Order from the VIEW
+    // 1) Order (from view to get merged fields)
     const { data: order, error: orderErr } = await supabase
       .from("work_order_full_view")
       .select("*")
@@ -224,25 +254,21 @@ export default async function handler(req, res) {
       .single();
     if (orderErr || !order) throw new Error("Work order not found");
 
-    // 2️⃣ Fetch company info
-    const { data: company } = await supabase
-      .from("company_profile")
-      .select("*")
-      .limit(1)
-      .single();
+    // 2) Company
+    const { data: company } = await supabase.from("company_profile").select("*").limit(1).single();
 
-    // 3️⃣ Build PDF
+    // 3) PDF
     const pdfBase64 = await buildPdf(order, company);
 
-    // 4️⃣ Print-only (no email)
+    // 4) Print only mode
     if (emailToSend === "printonly@local") {
       return res.status(200).json({ ok: true, pdfBase64, order_no: order.order_no });
     }
 
-    // 5️⃣ Send email
+    // 5) Send email
     const result = await sendEmail(emailToSend, pdfBase64, order.order_no);
 
-    // 6️⃣ Log success
+    // 6) Log success
     await supabase.rpc("fn_wo_log_email", {
       p_work_order_id: workOrderId,
       p_to: emailToSend,
@@ -255,14 +281,16 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, result });
   } catch (e) {
     console.error("❌ send.js error:", e.message);
-    await supabase.rpc("fn_wo_log_email", {
-      p_work_order_id: req.body?.workOrderId ?? null,
-      p_to: req.body?.emailToSend ?? null,
-      p_status: "FAILED",
-      p_provider_id: null,
-      p_error: e.message?.slice(0, 300) || "unknown",
-      p_payload: {},
-    });
+    try {
+      await supabase.rpc("fn_wo_log_email", {
+        p_work_order_id: req.body?.workOrderId ?? null,
+        p_to: req.body?.emailToSend ?? null,
+        p_status: "FAILED",
+        p_provider_id: null,
+        p_error: e.message?.slice(0, 300) || "unknown",
+        p_payload: {},
+      });
+    } catch {}
     return res.status(500).json({ ok: false, error: e.message });
   }
 }
