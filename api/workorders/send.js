@@ -4,47 +4,36 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { createClient } from "@supabase/supabase-js";
 
-// 🔑 ENV VARS
+// 🔑 ENV
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
 const FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
 
-// ───────────────────────────── HELPERS ─────────────────────────────
+// Helpers
 function formatDate(v) {
   if (!v) return "-";
-  try {
-    return new Date(v).toLocaleDateString("hr-HR");
-  } catch {
-    return String(v);
-  }
+  try { return new Date(v).toLocaleDateString("hr-HR"); } catch { return String(v); }
 }
-
 async function makeQRBuffer(text, sizePx = 90) {
   try {
     const url = `https://api.qrserver.com/v1/create-qr-code/?size=${sizePx}x${sizePx}&data=${encodeURIComponent(text)}`;
     const resp = await fetch(url);
     const arr = await resp.arrayBuffer();
     return Buffer.from(arr);
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-// ───────────────────────────── PDF BUILDER ─────────────────────────────
+// PDF
 async function buildPdf(order) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
 
   let fontBytes;
-  try {
-    fontBytes = fs.readFileSync(FONT_PATH);
-  } catch {}
-  const font = fontBytes
-    ? await pdfDoc.embedFont(fontBytes)
-    : await pdfDoc.embedFont(StandardFonts.Helvetica);
+  try { fontBytes = fs.readFileSync(FONT_PATH); } catch {}
+  const font = fontBytes ? await pdfDoc.embedFont(fontBytes) : await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   const page = pdfDoc.addPage([595, 842]);
@@ -60,41 +49,15 @@ async function buildPdf(order) {
 
   let y = height - 50;
 
-  // 🏢 COMPANY INFO
-  page.drawRectangle({
-    x: 40,
-    y: y - 80,
-    width: width - 80,
-    height: 65,
-    color: lightGray,
-    borderColor: borderGray,
-    borderWidth: 1,
-  });
-  draw(order.company_name || "Zlatarna Krizek", 55, y - 50, 15, blue);
-  draw(
-    [order.company_address, order.company_city, order.company_country].filter(Boolean).join(", "),
-    55,
-    y - 66,
-    10,
-    gray
-  );
-  draw(
-    [order.company_email, order.company_phone].filter(Boolean).join(" | "),
-    55,
-    y - 78,
-    9,
-    gray
-  );
+  // Company (grey card)
+  page.drawRectangle({ x: 40, y: y - 80, width: width - 80, height: 65, color: lightGray, borderColor: borderGray, borderWidth: 1 });
+  draw(order.company_name || "", 55, y - 50, 15, blue);
+  draw([order.company_address, order.company_city, order.company_country].filter(Boolean).join(", "), 55, y - 66, 10, gray);
+  draw([order.company_email, order.company_phone].filter(Boolean).join(" | "), 55, y - 78, 9, gray);
   y -= 100;
 
-  // 🔷 HEADER
-  page.drawRectangle({
-    x: 40,
-    y: y - 40,
-    width: width - 80,
-    height: 35,
-    color: blue,
-  });
+  // Header bar
+  page.drawRectangle({ x: 40, y: y - 40, width: width - 80, height: 35, color: blue });
   draw(`RADNI NALOG ${order.order_no || order.work_order_id}`, 55, y - 22, 15, rgb(1, 1, 1));
   y -= 60;
 
@@ -102,35 +65,17 @@ async function buildPdf(order) {
   draw(`Rok izrade: ${formatDate(order.due_date)}`, 330, y, 10, gray);
   y -= 30;
 
-  // 👤 KUPAC
-  draw("KUPAC", 45, y, 13, blue);
-  y -= 15;
-  page.drawRectangle({
-    x: 40,
-    y: y - 80,
-    width: width - 80,
-    height: 65,
-    color: lightGray,
-    borderColor: borderGray,
-    borderWidth: 1,
-  });
+  // Kupac
+  draw("KUPAC", 45, y, 13, blue); y -= 15;
+  page.drawRectangle({ x: 40, y: y - 80, width: width - 80, height: 65, color: lightGray, borderColor: borderGray, borderWidth: 1 });
   draw(`Ime: ${order.customer_name || "-"}`, 55, y - 20, 10, gray);
   draw(`Email: ${order.customer_email || "-"}`, 55, y - 35, 10, gray);
   draw(`Telefon: ${order.customer_phone || "-"}`, 55, y - 50, 10, gray);
   y -= 100;
 
-  // 📦 SPECIFIKACIJE
-  draw("SPECIFIKACIJE", 45, y, 13, blue);
-  y -= 15;
-  page.drawRectangle({
-    x: 40,
-    y: y - 145,
-    width: width - 80,
-    height: 130,
-    color: lightGray,
-    borderColor: borderGray,
-    borderWidth: 1,
-  });
+  // Specifikacije
+  draw("SPECIFIKACIJE", 45, y, 13, blue); y -= 15;
+  page.drawRectangle({ x: 40, y: y - 145, width: width - 80, height: 130, color: lightGray, borderColor: borderGray, borderWidth: 1 });
   const specs = [
     ["Kategorija", order.category],
     ["Model", order.model],
@@ -142,24 +87,12 @@ async function buildPdf(order) {
     ["Vrsta proizvodnje", order.production_type],
   ];
   let yy = y - 25;
-  for (const [label, val] of specs) {
-    draw(`${label}: ${val ?? "-"}`, 55, yy, 10, gray);
-    yy -= 15;
-  }
+  for (const [label, val] of specs) { draw(`${label}: ${val ?? "-"}`, 55, yy, 10, gray); yy -= 15; }
   y -= 165;
 
-  // 💍 DETALJI
-  draw("DETALJI", 45, y, 13, blue);
-  y -= 15;
-  page.drawRectangle({
-    x: 40,
-    y: y - 145,
-    width: width - 80,
-    height: 130,
-    color: lightGray,
-    borderColor: borderGray,
-    borderWidth: 1,
-  });
+  // Detalji
+  draw("DETALJI", 45, y, 13, blue); y -= 15;
+  page.drawRectangle({ x: 40, y: y - 145, width: width - 80, height: 130, color: lightGray, borderColor: borderGray, borderWidth: 1 });
   const details = [
     ["Veličina (muška)", order.male_size],
     ["Veličina (ženska)", order.female_size],
@@ -169,63 +102,37 @@ async function buildPdf(order) {
     ["Zajednička gravura", order.joint_engraving],
   ];
   let dy = y - 25;
-  for (const [label, val] of details) {
-    draw(`${label}: ${val ?? "-"}`, 55, dy, 10, gray);
-    dy -= 15;
-  }
+  for (const [label, val] of details) { draw(`${label}: ${val ?? "-"}`, 55, dy, 10, gray); dy -= 15; }
   y -= 165;
 
-  // 💬 NAPOMENE
-  draw("NAPOMENE", 45, y, 13, blue);
-  y -= 15;
-  page.drawRectangle({
-    x: 40,
-    y: y - 90,
-    width: width - 80,
-    height: 75,
-    color: lightGray,
-    borderColor: borderGray,
-    borderWidth: 1,
-  });
+  // Napomene
+  draw("NAPOMENE", 45, y, 13, blue); y -= 15;
+  page.drawRectangle({ x: 40, y: y - 90, width: width - 80, height: 75, color: lightGray, borderColor: borderGray, borderWidth: 1 });
   const notes = order.additional_comment || order.notes || "-";
   const lines = notes.split("\n").slice(0, 5);
-  let nY = y - 25;
-  for (const line of lines) {
-    draw(line, 55, nY, 10, gray);
-    nY -= 13;
-  }
+  let nY = y - 25; for (const line of lines) { draw(line, 55, nY, 10, gray); nY -= 13; }
   y -= 110;
 
-  // 🔲 QR CODE
+  // QR
   try {
-    const qrPng = await makeQRBuffer(`${order.company_name} | ${order.order_no || order.work_order_id}`);
+    const qrPng = await makeQRBuffer(`${order.company_name || ""} | ${order.order_no || order.work_order_id}`);
     if (qrPng) {
       const qrImg = await pdfDoc.embedPng(qrPng);
       page.drawImage(qrImg, { x: width - 130, y: 60, width: 80, height: 80 });
     }
   } catch {}
 
-  draw(
-    `Generated by ORCAFX • ${order.company_name || ""} • ${new Date().toLocaleString("hr-HR")}`,
-    55,
-    40,
-    9,
-    gray
-  );
+  draw(`Generated by ORCAFX • ${order.company_name || ""} • ${new Date().toLocaleString("hr-HR")}`, 55, 40, 9, gray);
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes).toString("base64");
 }
 
-// ───────────────────────────── EMAIL ─────────────────────────────
+// Email (Brevo)
 async function sendEmail(to, pdfBase64, order_no, company_name) {
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      "api-key": BREVO_API_KEY,
-    },
+    headers: { accept: "application/json", "content-type": "application/json", "api-key": BREVO_API_KEY },
     body: JSON.stringify({
       sender: { name: company_name || "ORCAFX", email: "noreply@orcafx.app" },
       to: [{ email: to }],
@@ -234,15 +141,14 @@ async function sendEmail(to, pdfBase64, order_no, company_name) {
       attachment: [{ name: `${order_no}.pdf`, base64Content: pdfBase64 }],
     }),
   });
-
   const txt = await res.text();
   if (!res.ok) throw new Error(`Brevo error: ${txt}`);
   return JSON.parse(txt);
 }
 
-// ───────────────────────────── HANDLER ─────────────────────────────
+// Handler
 export default async function handler(req, res) {
-  // ✅ CORS fix
+  // CORS
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Origin", "https://orcafx.vercel.app");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -253,22 +159,17 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const { workOrderId, emailToSend } = req.body || {};
-  if (!workOrderId || !emailToSend)
-    return res.status(400).json({ ok: false, error: "Missing parameters" });
+  if (!workOrderId || !emailToSend) return res.status(400).json({ ok: false, error: "Missing parameters" });
 
   try {
     const { data: order, error } = await supabase
       .from("work_order_full_view")
       .select("*")
-      .eq("work_order_id", workOrderId) // ✅ FIXED LINE
+      .eq("work_order_id", workOrderId)
       .single();
-
-    console.log("🔍 ORDER LOADED:", order);
-    console.log("🔍 SUPABASE ERROR:", error);
 
     if (error || !order) throw new Error("Work order not found");
 
