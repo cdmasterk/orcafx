@@ -10,15 +10,11 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 
-// Vercel (CommonJS transpile) fallback za __dirname
-
 // ---------- SUPABASE ----------
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // ---------- STATIC ASSETS ----------
 const FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
-// Logo: uzimamo iz company_profile.logo_url (preporuka), ali ako želiš fallback lokalno:
-// const LOGO_PATH = path.join(process.cwd(), "public", "logo.png");
 
 // ---------- HELPERS ----------
 async function fetchCompanyProfile() {
@@ -56,72 +52,56 @@ async function fetchLogoBytes(logoUrl) {
   }
 }
 
-// ---------- PDF BUILDER (Fiori-like) ----------
+// ---------- PDF BUILDER ----------
 async function buildPdf(order, company) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
 
-  // Font
-  let fontBytes = null;
+  // Font load
+  let font;
   try {
-    fontBytes = fs.readFileSync(FONT_PATH);
-  } catch (err) {
-    console.warn("⚠️ Font not found, fallback to Helvetica:", err.message);
+    const fontBytes = fs.readFileSync(FONT_PATH);
+    font = await pdfDoc.embedFont(fontBytes);
+  } catch {
+    font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   }
-  const font = fontBytes
-    ? await pdfDoc.embedFont(fontBytes, { subset: true })
-    : await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  // Colors (Fiori-ish)
-  const colPrimary = rgb(0.0, 0.32, 0.61); // SAP blue-ish
-  const colMuted = rgb(0.40, 0.40, 0.40);
-  const colLine = rgb(0.85, 0.85, 0.85);
-
-  // Page
   const page = pdfDoc.addPage([595.28, 841.89]); // A4
   const { width, height } = page.getSize();
 
-  // Optional logo (from URL in DB)
-  const logoBytes = await fetchLogoBytes(company?.logo_url || "");
-  if (logoBytes) {
-    try {
-      let logo;
-      // pokušaj PNG pa JPG
-      try {
-        logo = await pdfDoc.embedPng(logoBytes);
-      } catch {
-        logo = await pdfDoc.embedJpg(logoBytes);
-      }
-      const lw = 120;
-      const lh = (logo.height / logo.width) * lw;
-      page.drawImage(logo, { x: width - lw - 40, y: height - lh - 40, width: lw, height: lh });
-    } catch {
-      /* ignore logo if fails */
-    }
-  }
+  const colPrimary = rgb(0, 0.32, 0.61);
+  const colMuted = rgb(0.4, 0.4, 0.4);
+  const colLine = rgb(0.85, 0.85, 0.85);
 
-  // Header strip
+  // Header
   page.drawRectangle({ x: 0, y: height - 70, width, height: 70, color: rgb(0.97, 0.97, 0.98) });
   page.drawText("RADNI NALOG", { x: 40, y: height - 45, size: 20, color: colPrimary, font });
 
-  // Company block
+  // Company info
   const companyName = company?.legal_name || "—";
-  const companyLine = [
-    company?.address_line, company?.city, company?.country
-  ].filter(Boolean).join(", ");
+  const companyLine = [company?.address_line, company?.city, company?.country]
+    .filter(Boolean)
+    .join(", ");
   const companyContact = [
     company?.phone ? `Tel: ${company.phone}` : "",
-    company?.email ? `Email: ${company.email}` : ""
-  ].filter(Boolean).join(" · ");
+    company?.email ? `Email: ${company.email}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   page.drawText(companyName, { x: 40, y: height - 85, size: 12, font, color: rgb(0, 0, 0) });
-  if (companyLine) page.drawText(companyLine, { x: 40, y: height - 100, size: 10, font, color: colMuted });
-  if (companyContact) page.drawText(companyContact, { x: 40, y: height - 115, size: 10, font, color: colMuted });
+  if (companyLine)
+    page.drawText(companyLine, { x: 40, y: height - 100, size: 10, font, color: colMuted });
+  if (companyContact)
+    page.drawText(companyContact, { x: 40, y: height - 115, size: 10, font, color: colMuted });
+  page.drawLine({
+    start: { x: 40, y: height - 130 },
+    end: { x: width - 40, y: height - 130 },
+    thickness: 0.5,
+    color: colLine,
+  });
 
-  // Thin line
-  page.drawLine({ start: { x: 40, y: height - 130 }, end: { x: width - 40, y: height - 130 }, thickness: 0.5, color: colLine });
-
-  // Two-column helper
+  // Helper for key-value
   const leftX = 40;
   const rightX = width / 2 + 10;
   let yL = height - 160;
@@ -133,28 +113,41 @@ async function buildPdf(order, company) {
     page.drawText(v ?? "-", { x, y: y - 14, size: 12, font, color: rgb(0, 0, 0) });
   };
 
-  // --- LEFT: Order basics ---
-  drawKV(leftX, yL, "Broj naloga", order.order_no || String(order.id)); yL -= lineGap * 2;
-  drawKV(leftX, yL, "Datum", new Date().toLocaleString("hr-HR")); yL -= lineGap * 2;
-  drawKV(leftX, yL, "Status", order.status || "—"); yL -= lineGap * 2;
-  drawKV(leftX, yL, "Količina", String(order.quantity ?? 1)); yL -= lineGap * 2;
+  // Left side
+  drawKV(leftX, yL, "Broj naloga", order.order_no || String(order.id));
+  yL -= lineGap * 2;
+  drawKV(leftX, yL, "Datum", new Date().toLocaleString("hr-HR"));
+  yL -= lineGap * 2;
+  drawKV(leftX, yL, "Status", order.status || "—");
+  yL -= lineGap * 2;
+  drawKV(leftX, yL, "Količina", String(order.quantity ?? 1));
+  yL -= lineGap * 2;
 
-  // --- RIGHT: Customer ---
-  drawKV(rightX, yR, "Kupac", order.customer_name || "—"); yR -= lineGap * 2;
-  drawKV(rightX, yR, "Email", order.customer_email || "—"); yR -= lineGap * 2;
-  drawKV(rightX, yR, "Radionica", order.workshop_name || order.workshop || "—"); yR -= lineGap * 2;
-  drawKV(rightX, yR, "Unio", order.entered_by || order.created_by || "—"); yR -= lineGap * 2;
+  // Right side
+  drawKV(rightX, yR, "Kupac", order.customer_name || "—");
+  yR -= lineGap * 2;
+  drawKV(rightX, yR, "Email", order.customer_email || "—");
+  yR -= lineGap * 2;
+  drawKV(rightX, yR, "Radionica", order.workshop_name || order.workshop || "—");
+  yR -= lineGap * 2;
+  drawKV(rightX, yR, "Unio", order.entered_by || order.created_by || "—");
+  yR -= lineGap * 2;
 
-  // Section: Specifikacije (full width grid like)
+  // Section: Specifikacije
   const sectionTitle = (txt, yy) => {
     page.drawText(txt, { x: 40, y: yy, size: 12, font, color: colPrimary });
-    page.drawLine({ start: { x: 40, y: yy - 6 }, end: { x: width - 40, y: yy - 6 }, thickness: 0.5, color: colLine });
+    page.drawLine({
+      start: { x: 40, y: yy - 6 },
+      end: { x: width - 40, y: yy - 6 },
+      thickness: 0.5,
+      color: colLine,
+    });
   };
 
   let y = Math.min(yL, yR) - 10;
-  sectionTitle("SPECIFIKACIJE", y); y -= 20;
+  sectionTitle("SPECIFIKACIJE", y);
+  y -= 20;
 
-  // Spec fields (2 columns)
   const specPairs = [
     ["Tip proizvoda", order.product_type || order.type || "—"],
     ["Čistoća", order.purity || "—"],
@@ -175,10 +168,12 @@ async function buildPdf(order, company) {
   }
 
   // Section: Gravure i napomena
-  sectionTitle("GRAVURE I DODATNO", y); y -= 20;
+  sectionTitle("GRAVURE I DODATNO", y);
+  y -= 20;
 
   const longKV = (label, value) => {
-    page.drawText(label, { x: 40, y, size: 10, font, color: colMuted }); y -= 14;
+    page.drawText(label, { x: 40, y, size: 10, font, color: colMuted });
+    y -= 14;
     const text = (value && String(value)) || "—";
     const chunks = text.match(/.{1,92}/g) || [text];
     for (const line of chunks) {
@@ -193,22 +188,34 @@ async function buildPdf(order, company) {
   longKV("Zajednička gravura", order.joint_engraving);
   longKV("Napomena", order.additional_comment || order.notes || order.description);
 
-  // Section: Predujam (ako postoji)
+  // Predujam
   if (order.prepayment || (order.prepayment_amount ?? 0) > 0) {
-    sectionTitle("PREDUJAM", y); y -= 20;
+    sectionTitle("PREDUJAM", y);
+    y -= 20;
     const pp = Number(order.prepayment_amount || 0);
     drawKV(leftX, y, "Predujam", `${pp.toFixed(2)} €`);
     y -= lineGap * 2;
   }
 
   // Footer
-  page.drawLine({ start: { x: 40, y: 70 }, end: { x: width - 40, y: 70 }, thickness: 0.5, color: colLine });
+  page.drawLine({
+    start: { x: 40, y: 70 },
+    end: { x: width - 40, y: 70 },
+    thickness: 0.5,
+    color: colLine,
+  });
   page.drawText(companyName, { x: 40, y: 56, size: 9, font, color: colMuted });
   if (company?.tax_id)
     page.drawText(`OIB: ${company.tax_id}`, { x: 40, y: 42, size: 9, font, color: colMuted });
   if (company?.iban)
     page.drawText(`IBAN: ${company.iban}`, { x: 40, y: 28, size: 9, font, color: colMuted });
-  page.drawText("Generirano u ORCAFX ERP", { x: width - 180, y: 28, size: 9, font, color: colMuted });
+  page.drawText("Generirano u ORCAFX ERP", {
+    x: width - 180,
+    y: 28,
+    size: 9,
+    font,
+    color: colMuted,
+  });
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes).toString("base64");
@@ -233,7 +240,7 @@ async function sendEmail(to, pdfBase64, order_no, company) {
     attachment: [
       {
         name: `${order_no}.pdf`,
-        base64Content: pdfBase64, // ← ispravan ključ za Brevo
+        base64Content: pdfBase64,
       },
     ],
   };
@@ -261,20 +268,16 @@ export default async function handler(req, res) {
   const { workOrderId, emailToSend } = req.body || {};
 
   try {
-    // 1) Data
     const [company, order] = await Promise.all([
       fetchCompanyProfile(),
       fetchWorkOrder(workOrderId),
     ]);
 
-    // 2) PDF
     const pdfBase64 = await buildPdf(order, company);
 
-    // 3) If we have an email, send; otherwise just return PDF (print-only mode)
     let sent = null;
     if (emailToSend) {
       sent = await sendEmail(emailToSend, pdfBase64, order.order_no || order.id, company);
-      // Log success
       try {
         await supabase.rpc("fn_wo_log_email", {
           p_work_order_id: workOrderId,
@@ -293,13 +296,12 @@ export default async function handler(req, res) {
       ok: true,
       mailed: Boolean(emailToSend),
       result: sent,
-      pdfBase64, // uvijek vraćamo PDF → frontend može “Print/Download”
+      pdfBase64,
       order_no: order.order_no || order.id,
     });
   } catch (e) {
     console.error("❌ send.js error:", e.message);
 
-    // Log fail (ako imamo osnovne id podatke)
     try {
       if (workOrderId && emailToSend) {
         await supabase.rpc("fn_wo_log_email", {
