@@ -95,7 +95,7 @@ async function buildPdf(order) {
     height: 35,
     color: blue,
   });
-  draw(`RADNI NALOG ${order.order_no || order.id}`, 55, y - 22, 15, rgb(1, 1, 1));
+  draw(`RADNI NALOG ${order.order_no || order.work_order_id}`, 55, y - 22, 15, rgb(1, 1, 1));
   y -= 60;
 
   draw(`Datum narudžbe: ${formatDate(order.order_date)}`, 55, y, 10, gray);
@@ -198,7 +198,7 @@ async function buildPdf(order) {
 
   // 🔲 QR CODE
   try {
-    const qrPng = await makeQRBuffer(`${order.company_name} | ${order.order_no || order.id}`);
+    const qrPng = await makeQRBuffer(`${order.company_name} | ${order.order_no || order.work_order_id}`);
     if (qrPng) {
       const qrImg = await pdfDoc.embedPng(qrPng);
       page.drawImage(qrImg, { x: width - 130, y: 60, width: 80, height: 80 });
@@ -242,7 +242,7 @@ async function sendEmail(to, pdfBase64, order_no, company_name) {
 
 // ───────────────────────────── HANDLER ─────────────────────────────
 export default async function handler(req, res) {
-  // ✅ CORS fix za frontend orcafx.vercel.app
+  // ✅ CORS fix
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Origin", "https://orcafx.vercel.app");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -264,7 +264,7 @@ export default async function handler(req, res) {
     const { data: order, error } = await supabase
       .from("work_order_full_view")
       .select("*")
-      .eq("id", workOrderId) // ✅ FIXED
+      .eq("work_order_id", workOrderId) // ✅ FIXED LINE
       .single();
 
     console.log("🔍 ORDER LOADED:", order);
