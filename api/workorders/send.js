@@ -5,18 +5,16 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { createClient } from "@supabase/supabase-js";
 
-// 🔑 ENV
+// 🔑 ENV VARS
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // 🗂 Font
 const FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Helpers
+// ---------- Helpers ----------
 function formatDate(v) {
   if (!v) return "-";
   try {
@@ -24,10 +22,6 @@ function formatDate(v) {
   } catch {
     return String(v);
   }
-}
-function section(page, font, title, y) {
-  page.drawText(title, { x: 40, y, size: 13, font, color: rgb(0, 0, 0) });
-  return y - 20;
 }
 function multiLine(page, font, text, x, y, size, maxWidth, leading) {
   const words = String(text || "-").split(/\s+/);
@@ -44,54 +38,36 @@ function multiLine(page, font, text, x, y, size, maxWidth, leading) {
   if (line) page.drawText(line, { x, y, size, font });
   return y - leading;
 }
-
-// ───────────────────────────────────────────────────────────────────────────────
-// QR generator (with fallback, no dependency required)
-async function makeQRBuffer(text, sizePx = 80) {
-  // 1) Try dynamic import of 'qrcode' if it exists
-  let qrcode = null;
+async function makeQRBuffer(text, sizePx = 90) {
   try {
-    // dynamic import avoids hard dependency at build-time
-    qrcode = await import("qrcode").then((m) => m.default || m).catch(() => null);
+    const url = `https://api.qrserver.com/v1/create-qr-code/?size=${sizePx}x${sizePx}&data=${encodeURIComponent(
+      text
+    )}`;
+    const resp = await fetch(url);
+    const arr = await resp.arrayBuffer();
+    return Buffer.from(arr);
   } catch {
-    qrcode = null;
+    return null;
   }
-
-  if (qrcode && qrcode.toBuffer) {
-    return await qrcode.toBuffer(text, { width: sizePx });
-  }
-
-  // 2) Fallback to public QR service (PNG)
-  const url = `https://api.qrserver.com/v1/create-qr-code/?size=${sizePx}x${sizePx}&data=${encodeURIComponent(
-    text
-  )}`;
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error("QR fetch failed");
-  const arr = await resp.arrayBuffer();
-  return Buffer.from(arr);
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
-/// --- zamijeni samo funkciju buildPdf u send.js ---
+// ---------- PDF BUILDER ----------
 async function buildPdf(order, company) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
 
-  // Font
   let fontBytes;
   try {
     fontBytes = fs.readFileSync(FONT_PATH);
-  } catch (e) {
-    console.warn("⚠️ Font not found, using Helvetica fallback:", e.message);
-  }
+  } catch {}
   const font = fontBytes
     ? await pdfDoc.embedFont(fontBytes)
     : await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  const page = pdfDoc.addPage([595, 842]); // A4
+  const page = pdfDoc.addPage([595, 842]);
   const { width, height } = page.getSize();
   const blue = rgb(0, 0.44, 0.95);
-  const gray = rgb(0.4, 0.4, 0.4);
+  const gray = rgb(0.3, 0.3, 0.3);
   const draw = (txt, x, y, size = 11, color = rgb(0, 0, 0)) =>
     page.drawText(String(txt ?? "-"), { x, y, size, font, color });
 
@@ -99,9 +75,7 @@ async function buildPdf(order, company) {
 
   // 🏢 COMPANY INFO
   const name = company?.legal_name || "Zlatarna Krizek doo";
-  const address = [company?.address_line, company?.city, company?.country]
-    .filter(Boolean)
-    .join(", ");
+  const address = [company?.address_line, company?.city, company?.country].filter(Boolean).join(", ");
   const tax = company?.tax_id ? `OIB: ${company.tax_id}` : "";
   const contact = [company?.email, company?.phone].filter(Boolean).join("  |  ");
   const iban = company?.iban ? `IBAN: ${company.iban}` : "";
@@ -121,7 +95,6 @@ async function buildPdf(order, company) {
   draw(tax, 140, y - 30, 10, gray);
   draw(contact, 140, y - 42, 10, gray);
   draw(iban, 140, y - 54, 10, gray);
-
   y -= 70;
 
   // 🔷 HEADER TITLE
@@ -136,21 +109,14 @@ async function buildPdf(order, company) {
   y -= 50;
 
   // 🕓 DATUMI
-  draw(`Datum narudžbe: ${formatDate(order.order_date)}`, 50, y, 11);
-  draw(`Rok izrade: ${formatDate(order.due_date)}`, 330, y, 11);
+  draw(`Datum narudžbe: ${formatDate(order.order_date)}`, 50, y);
+  draw(`Rok izrade: ${formatDate(order.due_date)}`, 330, y);
   y -= 20;
 
-  // 🔹 SEPARATOR
-  page.drawLine({
-    start: { x: 40, y },
-    end: { x: width - 40, y },
-    thickness: 0.5,
-    color: gray,
-  });
-  y -= 25;
-
-  // 👤 CUSTOMER INFO
-  y = section(page, font, "KUPAC", y, blue);
+  // 👤 KUPAC
+  y = y - 10;
+  page.drawText("KUPAC", { x: 40, y, size: 13, font, color: blue });
+  y -= 18;
   const cust = [
     ["Ime", order.customer_name],
     ["Email", order.customer_email],
@@ -161,10 +127,11 @@ async function buildPdf(order, company) {
     draw(`${v ?? "-"}`, 150, y);
     y -= 16;
   }
-  y -= 10;
 
   // 📦 SPECIFIKACIJE
-  y = section(page, font, "SPECIFIKACIJE", y, blue);
+  y -= 8;
+  page.drawText("SPECIFIKACIJE", { x: 40, y, size: 13, font, color: blue });
+  y -= 18;
   const specs = [
     ["Kategorija", order.category],
     ["Model", order.model],
@@ -178,10 +145,11 @@ async function buildPdf(order, company) {
     draw(`${v ?? "-"}`, 180, y);
     y -= 16;
   }
-  y -= 10;
 
   // 💍 DETALJI
-  y = section(page, font, "DETALJI", y, blue);
+  y -= 8;
+  page.drawText("DETALJI", { x: 40, y, size: 13, font, color: blue });
+  y -= 18;
   const details = [
     ["Veličina (muška)", order.male_size],
     ["Veličina (ženska)", order.female_size],
@@ -197,183 +165,43 @@ async function buildPdf(order, company) {
   }
 
   // 💬 NAPOMENE
-  y = section(page, font, "DODATNE NAPOMENE", y, blue);
-  y = multiLine(page, font, order.additional_comment ?? "-", 60, y, 11, 480, 16) - 8;
+  y -= 8;
+  page.drawText("NAPOMENE", { x: 40, y, size: 13, font, color: blue });
+  y = multiLine(page, font, order.additional_comment ?? "-", 60, y - 20, 11, 460, 16);
 
   // 🖼️ SKICA
   if (order.sketch_url) {
-    y = section(page, font, "SKICA", y, blue);
+    y -= 10;
+    page.drawText("SKICA", { x: 40, y, size: 13, font, color: blue });
     try {
       const buf = await fetch(order.sketch_url).then((r) => r.arrayBuffer());
       const img = order.sketch_url.endsWith(".png")
         ? await pdfDoc.embedPng(buf)
         : await pdfDoc.embedJpg(buf);
       page.drawImage(img, { x: 60, y: y - 180, width: 180, height: 180 });
-      y -= 190;
+      y -= 200;
     } catch {
-      draw("⚠️ Skica nije učitana", 60, y);
-      y -= 18;
+      draw("⚠️ Skica nije učitana", 60, y - 20);
     }
   }
 
-  // 🔲 QR CODE
+  // 🔲 QR kod
   try {
-    const qrText = `${name} | ${order.order_no}`;
-    const qrPng = await makeQRBuffer(qrText, 90);
-    const qrImg = await pdfDoc.embedPng(qrPng);
-    page.drawImage(qrImg, { x: width - 120, y: 60, width: 70, height: 70 });
-  } catch (e) {
-    console.warn("⚠️ QR embed failed:", e.message);
-  }
+    const qrPng = await makeQRBuffer(`${name} | ${order.order_no}`);
+    if (qrPng) {
+      const qrImg = await pdfDoc.embedPng(qrPng);
+      page.drawImage(qrImg, { x: width - 120, y: 60, width: 70, height: 70 });
+    }
+  } catch {}
 
   // Footer
-  draw(
-    `Generated by ORCAFX • ${name} • ${new Date().toLocaleString("hr-HR")}`,
-    50,
-    40,
-    9,
-    gray
-  );
+  draw(`Generated by ORCAFX • ${name} • ${new Date().toLocaleString("hr-HR")}`, 50, 40, 9, gray);
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes).toString("base64");
 }
 
-// izmijenjeni section helper
-function section(page, font, title, y, color) {
-  page.drawLine({
-    start: { x: 40, y: y + 4 },
-    end: { x: 555, y: y + 4 },
-    thickness: 1,
-    color: color,
-  });
-  page.drawText(title, { x: 40, y: y - 10, size: 13, font, color });
-  return y - 25;
-}
-
-  // 🏢 Company header
-  const companyName = company?.legal_name || "Zlatarna Krizek doo";
-  const address = [company?.address_line, company?.city, company?.country].filter(Boolean).join(", ");
-  let y = height - 40;
-
-  if (company?.logo_url) {
-    try {
-      const buf = await fetch(company.logo_url).then((r) => r.arrayBuffer());
-      let img;
-      try {
-        img = await pdfDoc.embedPng(buf);
-      } catch {
-        img = await pdfDoc.embedJpg(buf);
-      }
-      page.drawImage(img, { x: 40, y: y - 32, width: 96, height: 32 });
-    } catch (e) {
-      console.warn("⚠️ Logo embed failed:", e.message);
-    }
-  }
-
-  draw(companyName, 160, y, 16);
-  draw(`${address}`, 160, y - 16, 10);
-  draw(`${company?.email || ""}  |  ${company?.phone || ""}`, 160, y - 28, 10);
-  draw(`OIB: ${company?.tax_id || "-"}`, 160, y - 40, 10);
-  y -= 60;
-
-  // Title + dates
-  draw(`RADNI NALOG ${order.order_no}`, 40, y, 18);
-  y -= 24;
-  draw(`Datum narudžbe: ${formatDate(order.order_date)}`, 40, y);
-  draw(`Rok izrade: ${formatDate(order.due_date)}`, 300, y);
-  y -= 18;
-
-  // Separator
-  page.drawLine({
-    start: { x: 40, y },
-    end: { x: width - 40, y },
-    thickness: 0.5,
-    color: rgb(0.6, 0.6, 0.6),
-  });
-  y -= 20;
-
-  // 👤 Customer
-  y = section(page, font, "KUPAC", y);
-  draw(`Ime: ${order.customer_name || "-"}`, 60, y);
-  y -= 18;
-  draw(`Email: ${order.customer_email || "-"}`, 60, y);
-  y -= 18;
-  draw(`Telefon: ${order.customer_phone || "-"}`, 60, y);
-  y -= 10;
-
-  // 📦 Specifikacije
-  y = section(page, font, "SPECIFIKACIJE", y);
-  const specs = [
-    ["Kategorija", order.category],
-    ["Model", order.model],
-    ["Čistoća", order.purity],
-    ["Boja", order.color],
-    ["Količina", order.quantity],
-    ["Status", order.status],
-  ];
-  for (const [k, v] of specs) {
-    draw(`${k}: ${v ?? "-"}`, 60, y);
-    y -= 18;
-  }
-
-  // 💍 Detalji
-  y = section(page, font, "DETALJI", y);
-  const details = [
-    ["Veličina (muška)", order.male_size],
-    ["Veličina (ženska)", order.female_size],
-    ["Kamenje", order.stones],
-    ["Gravura 1", order.engraving_1],
-    ["Gravura 2", order.engraving_2],
-    ["Zajednička gravura", order.joint_engraving],
-  ];
-  for (const [k, v] of details) {
-    draw(`${k}: ${v ?? "-"}`, 60, y);
-    y -= 18;
-  }
-
-  // 💬 Napomene
-  y = section(page, font, "DODATNE NAPOMENE", y);
-  y = multiLine(page, font, order.additional_comment ?? "-", 60, y, 11, 480, 16) - 8;
-
-  // 🖼️ Skica
-  if (order.sketch_url) {
-    y = section(page, font, "SKICA", y);
-    try {
-      const buf = await fetch(order.sketch_url).then((r) => r.arrayBuffer());
-      let img;
-      try {
-        img = await pdfDoc.embedPng(buf);
-      } catch {
-        img = await pdfDoc.embedJpg(buf);
-      }
-      page.drawImage(img, { x: 60, y: y - 180, width: 180, height: 180 });
-      y -= 190;
-    } catch {
-      draw("⚠️ Skica nije učitana", 60, y);
-      y -= 18;
-    }
-  }
-
-  // 🔲 QR (no dependency fallback)
-  try {
-    const qrText = `${companyName} | ${order.order_no}`;
-    const qrPng = await makeQRBuffer(qrText, 80);
-    const qrImg = await pdfDoc.embedPng(qrPng);
-    page.drawImage(qrImg, { x: width - 120, y: 60, width: 60, height: 60 });
-  } catch (e) {
-    console.warn("⚠️ QR embed failed:", e.message);
-  }
-
-  // Footer
-  draw(`Generated by ORCAFX • ${companyName} • ${new Date().toLocaleString("hr-HR")}`, 40, 40, 9);
-
-  const pdfBytes = await pdfDoc.save();
-  return Buffer.from(pdfBytes).toString("base64");
-}
-
-// ───────────────────────────────────────────────────────────────────────────────
-// Brevo
+// ---------- Email ----------
 async function sendEmail(to, pdfBase64, order_no) {
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -395,8 +223,7 @@ async function sendEmail(to, pdfBase64, order_no) {
   return JSON.parse(txt);
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Handler
+// ---------- API HANDLER ----------
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
@@ -405,7 +232,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: "Missing parameters: workOrderId, emailToSend" });
 
   try {
-    // 1) Order (from view to get merged fields)
+    // 1️⃣ Work order
     const { data: order, error: orderErr } = await supabase
       .from("work_order_full_view")
       .select("*")
@@ -413,21 +240,21 @@ export default async function handler(req, res) {
       .single();
     if (orderErr || !order) throw new Error("Work order not found");
 
-    // 2) Company
+    // 2️⃣ Company
     const { data: company } = await supabase.from("company_profile").select("*").limit(1).single();
 
-    // 3) PDF
+    // 3️⃣ Generate PDF
     const pdfBase64 = await buildPdf(order, company);
 
-    // 4) Print only mode
+    // 4️⃣ Print only mode
     if (emailToSend === "printonly@local") {
       return res.status(200).json({ ok: true, pdfBase64, order_no: order.order_no });
     }
 
-    // 5) Send email
+    // 5️⃣ Send mail
     const result = await sendEmail(emailToSend, pdfBase64, order.order_no);
 
-    // 6) Log success
+    // 6️⃣ Log result
     await supabase.rpc("fn_wo_log_email", {
       p_work_order_id: workOrderId,
       p_to: emailToSend,
@@ -442,11 +269,11 @@ export default async function handler(req, res) {
     console.error("❌ send.js error:", e.message);
     try {
       await supabase.rpc("fn_wo_log_email", {
-        p_work_order_id: req.body?.workOrderId ?? null,
-        p_to: req.body?.emailToSend ?? null,
+        p_work_order_id: workOrderId ?? null,
+        p_to: emailToSend ?? null,
         p_status: "FAILED",
         p_provider_id: null,
-        p_error: e.message?.slice(0, 300) || "unknown",
+        p_error: e.message?.slice(0, 200) || "unknown",
         p_payload: {},
       });
     } catch {}
