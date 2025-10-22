@@ -1,186 +1,204 @@
 // api/workorders/send.js
-// Node.js (CommonJS) kompatibilno — bez import.meta i bez ESM/CJS kolizija
+import fs from "fs";
+import path from "path";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { createClient } from "@supabase/supabase-js";
 
-const fs = require("fs");
-const path = require("path");
-const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
-const fontkit = require("@pdf-lib/fontkit");
-const { createClient } = require("@supabase/supabase-js");
-
-// 🔑 ENV (postavljeno u Vercel Project Settings → Environment Variables)
+// 🔑 ENVIRONMENT VARIABLES
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
-const BREVO_SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || "noreply@krizek.hr";
-const BREVO_SENDER_NAME  = process.env.BREVO_SENDER_NAME  || "Zlatarna Križek";
 
-// ⛑️ Supabase SR klijent (server-side)
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// 📂 Put do fonta (radi i na Vercelu jer je u repo-u: public/fonts/NotoSans-Regular.ttf)
+// 📄 FONT PATH
 const FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ───────────────────────────────────────────────────────────────────────────────
+// ---------- PDF BUILDER ----------
+async function buildPdf(order, company) {
+  const pdfDoc = await PDFDocument.create();
+  pdfDoc.registerFontkit(fontkit);
 
-function isValidEmail(v) {
-  return typeof v === "string" && v.includes("@") && v.length <= 254;
-}
-
-function safe(val) {
-  if (val === null || val === undefined) return "-";
-  if (typeof val === "string" && !val.trim()) return "-";
-  return String(val);
-}
-
-// ───────────────────────────────────────────────────────────────────────────────
-// PDF (Fiori-ish layout, HR znakovi podržani preko NotoSans; fallback Helvetica)
-// ───────────────────────────────────────────────────────────────────────────────
-
-async function buildPdf({ company, wo, co }) {
-  const pdf = await PDFDocument.create();
-  pdf.registerFontkit(fontkit);
-
-  let fontBytes = null;
+  let fontBytes;
   try {
     fontBytes = fs.readFileSync(FONT_PATH);
   } catch (e) {
-    console.warn("⚠️ Font not found, fallback to Helvetica:", e.message);
+    console.warn("⚠️ Font not found, using Helvetica fallback:", e.message);
   }
 
   const font = fontBytes
-    ? await pdf.embedFont(fontBytes, { subset: true })
-    : await pdf.embedFont(StandardFonts.Helvetica);
+    ? await pdfDoc.embedFont(fontBytes)
+    : await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  const page = pdf.addPage([595.28, 841.89]); // A4
+  const page = pdfDoc.addPage([595, 842]);
   const { width, height } = page.getSize();
 
-  // Header bar
-  page.drawRectangle({
-    x: 0,
-    y: height - 72,
-    width,
-    height: 72,
-    color: rgb(0.97, 0.97, 0.98),
-  });
+  const draw = (text, x, y, size = 11) =>
+    page.drawText(String(text ?? "-"), { x, y, size, font, color: rgb(0, 0, 0) });
 
-  // Company block (iz company_info)
-  const companyName  = company?.legal_name || "—";
-  const companyAddr  = [company?.address_line, company?.city, company?.country].filter(Boolean).join(", ");
-  const companyEmail = company?.email || "-";
-  const companyPhone = company?.phone || "-";
-  const companyTaxId = company?.tax_id ? `OIB: ${company.tax_id}` : "";
+  // 🏢 HEADER — COMPANY INFO
+  const companyName = company?.legal_name || "Zlatarna Krizek doo";
+  const address = [company?.address_line, company?.city, company?.country]
+    .filter(Boolean)
+    .join(", ");
+  let y = height - 40;
 
-  page.drawText(companyName, { x: 40, y: height - 40, size: 14, font });
-  page.drawText(companyAddr,  { x: 40, y: height - 58, size: 10, font, color: rgb(0.25,0.25,0.25) });
-  page.drawText(`${companyEmail}  |  ${companyPhone}  ${companyTaxId ? " | " + companyTaxId : ""}`, {
-    x: 40, y: height - 72, size: 9, font, color: rgb(0.35,0.35,0.35)
-  });
-
-  // Title
-  page.drawText("RADNI NALOG", {
-    x: width - 200,
-    y: height - 48,
-    size: 18,
-    font,
-    color: rgb(0.1, 0.1, 0.1),
-  });
-
-  // Meta
-  const metaTop = height - 110;
-  const line = (label, value, y) => {
-    page.drawText(label, { x: 40, y, size: 10, font, color: rgb(0.45, 0.45, 0.45) });
-    page.drawText(safe(value), { x: 170, y, size: 11, font, color: rgb(0, 0, 0) });
-  };
-
-  line("Broj naloga", wo.order_no || wo.id, metaTop);
-  line("Datum", new Date().toLocaleString("hr-HR"), metaTop - 16);
-  line("Status", wo.status || "-", metaTop - 32);
-
-  // Customer / Order
-  const leftTop = metaTop - 70;
-  page.drawText("PODACI O NARUČITELJU", {
-    x: 40, y: leftTop, size: 10, font, color: rgb(0.4, 0.4, 0.4)
-  });
-  page.drawRectangle({ x: 40, y: leftTop - 4, width: 160, height: 1, color: rgb(0.8,0.8,0.85) });
-
-  line("Kupac", wo.customer_name || co?.customer_name || "-", leftTop - 18);
-  line("E-mail", wo.customer_email || co?.customer_email || "-", leftTop - 34);
-
-  page.drawText("DETALJI NARUDŽBE", {
-    x: 330, y: leftTop, size: 10, font, color: rgb(0.4, 0.4, 0.4)
-  });
-  page.drawRectangle({ x: 330, y: leftTop - 4, width: 160, height: 1, color: rgb(0.8,0.8,0.85) });
-
-  const r = (lbl, v, y) => line(lbl, v, y);
-  r("Tip", wo.product_type || co?.product_type || "-", leftTop - 18);
-  r("Čistoća", wo.purity || co?.purity || "-", leftTop - 34);
-  r("Boja", wo.color || co?.color || "-", leftTop - 50);
-  r("Model", wo.model || co?.model || "-", leftTop - 66);
-  r("Količina", wo.quantity || co?.quantity || 1, leftTop - 82);
-  r("Rok (Due)", co?.due_date ? new Date(co.due_date).toLocaleString("hr-HR") : "-", leftTop - 98);
-
-  // Specs from custom_orders (ako postoje)
-  const specTop = leftTop - 130;
-  page.drawText("SPECIFIKACIJE", {
-    x: 40, y: specTop, size: 10, font, color: rgb(0.4, 0.4, 0.4)
-  });
-  page.drawRectangle({ x: 40, y: specTop - 4, width: 450, height: 1, color: rgb(0.8,0.8,0.85) });
-
-  const specs = [
-    ["Muška mjera", co?.male_size],
-    ["Ženska mjera", co?.female_size],
-    ["Gravura 1", co?.engraving_1],
-    ["Gravura 2", co?.engraving_2],
-    ["Zajednička gravura", co?.joint_engraving],
-    ["Kamenje", co?.stones],
-    ["Skica", co?.has_sketch ? "DA" : "NE"],
-    ["Napomena", co?.additional_comment],
-  ];
-
-  let y = specTop - 18;
-  for (const [lbl, val] of specs) {
-    line(lbl, val || "-", y);
-    y -= 16;
+  if (company?.logo_url) {
+    try {
+      const buf = await fetch(company.logo_url).then((r) => r.arrayBuffer());
+      let img;
+      try {
+        img = await pdfDoc.embedPng(buf);
+      } catch {
+        img = await pdfDoc.embedJpg(buf);
+      }
+      page.drawImage(img, { x: 40, y: y - 32, width: 96, height: 32 });
+    } catch (e) {
+      console.warn("⚠️ Logo failed:", e.message);
+    }
   }
 
-  // Footer (potpis)
-  const footY = 130;
-  page.drawText("Potpis radionice:", { x: 40, y: footY + 10, size: 10, font, color: rgb(0.4,0.4,0.4) });
-  page.drawLine({ start: { x: 40, y: footY }, end: { x: width - 40, y: footY }, thickness: 0.5, color: rgb(0.7, 0.7, 0.7) });
+  draw(companyName, 160, y, 16);
+  draw(`${address} · ${company?.email || ""} · ${company?.phone || ""}`, 160, y - 18, 10);
 
-  page.drawText("Generirano iz ORCA sustava", { x: 40, y: 60, size: 9, font, color: rgb(0.5,0.5,0.5) });
+  y -= 50;
+  page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 1, color: rgb(0.1, 0.1, 0.1) });
+  y -= 24;
 
-  const pdfBytes = await pdf.save();
-  return pdfBytes.toString("base64");
-}
+  // 🧾 TITLE
+  draw(`RADNI NALOG — ${order.order_no ?? ""}`, 40, y, 18);
+  y -= 24;
+  draw(`Datum narudžbe: ${formatDate(order.order_date)}`, 40, y);
+  draw(`Rok izrade: ${formatDate(order.due_date)}`, 300, y);
+  y -= 22;
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Brevo (attachment: base64Content) — nema 'content' niti 'url'
-// ───────────────────────────────────────────────────────────────────────────────
-
-async function sendEmail({ to, pdfBase64, orderNo }) {
-  if (!BREVO_API_KEY) throw new Error("Missing BREVO_API_KEY");
-  if (!isValidEmail(to)) throw new Error("Neispravna e-mail adresa primatelja");
-
-  const payload = {
-    sender: { email: BREVO_SENDER_EMAIL, name: BREVO_SENDER_NAME },
-    to: [{ email: to }],
-    subject: `Radni nalog ${orderNo}`,
-    htmlContent: `
-      <p>Poštovani,</p>
-      <p>U privitku se nalazi radni nalog <b>${orderNo}</b>.</p>
-      <p>Lijep pozdrav,<br/>${BREVO_SENDER_NAME}</p>
-    `,
-    attachment: [
-      {
-        name: `${orderNo}.pdf`,
-        base64Content: pdfBase64, // ✅ ispravno polje za Brevo
-      },
-    ],
+  // Helper section
+  const section = (title) => {
+    y -= 12;
+    page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.5, color: rgb(0.5, 0.5, 0.5) });
+    y -= 20;
+    draw(title, 40, y, 13);
+    y -= 18;
   };
 
+  // 👤 CUSTOMER
+  section("KUPAC");
+  draw(`Ime: ${order.customer_name ?? "-"}`, 60, y);
+  y -= 18;
+  draw(`Email: ${order.customer_email ?? "-"}`, 60, y);
+  y -= 18;
+  draw(`Telefon: ${order.customer_phone ?? "-"}`, 60, y);
+  y -= 8;
+
+  // 📦 SPECIFIKACIJE
+  section("SPECIFIKACIJE");
+  const specs = [
+    ["Kategorija", order.category],
+    ["Model", order.model],
+    ["Čistoća", order.purity],
+    ["Boja", order.color],
+    ["Količina", order.quantity],
+    ["Status", order.status],
+  ];
+  for (const [k, v] of specs) {
+    draw(`${k}: ${v ?? "-"}`, 60, y);
+    y -= 18;
+  }
+  y -= 6;
+
+  // 💍 DETALJI
+  section("DETALJI");
+  const details = [
+    ["Veličina (muška)", order.male_size],
+    ["Veličina (ženska)", order.female_size],
+    ["Kamenje", order.stones],
+    ["Gravura 1", order.engraving_1],
+    ["Gravura 2", order.engraving_2],
+    ["Zajednička gravura", order.joint_engraving],
+  ];
+  for (const [k, v] of details) {
+    draw(`${k}: ${v ?? "-"}`, 60, y);
+    y -= 18;
+  }
+  y -= 6;
+
+  // 💬 KOMENTAR
+  section("DODATNO");
+  multiLine(page, font, order.additional_comment ?? "-", 60, y, 11, 460, 16);
+  y -= 90;
+
+  // 🖼️ SKICA
+  if (order.sketch_url) {
+    section("SKICA");
+    try {
+      const buf = await fetch(order.sketch_url).then((r) => r.arrayBuffer());
+      let img;
+      try {
+        img = await pdfDoc.embedPng(buf);
+      } catch {
+        img = await pdfDoc.embedJpg(buf);
+      }
+      const W = 180,
+        H = 180;
+      page.drawImage(img, { x: 60, y: y - H, width: W, height: H });
+      y -= H + 10;
+    } catch (e) {
+      draw("⚠️ Skica nije učitana", 60, y);
+      y -= 18;
+    }
+  }
+
+  // FOOTER
+  y -= 10;
+  page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
+  y -= 12;
+  draw(
+    `Generated by ORCAFX · ${companyName} · ${new Date().toLocaleString("hr-HR")}`,
+    40,
+    y,
+    9
+  );
+
+  const bytes = await pdfDoc.save();
+  return Buffer.from(bytes).toString("base64");
+}
+
+// ---------- UTILS ----------
+function formatDate(v) {
+  if (!v) return "-";
+  try {
+    return new Date(v).toLocaleString("hr-HR");
+  } catch {
+    return String(v);
+  }
+}
+function multiLine(page, font, text, x, y, size, maxWidth, leading) {
+  const words = String(text || "-").split(/\s+/);
+  let line = "";
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    const width = font.widthOfTextAtSize(test, size);
+    if (width > maxWidth) {
+      page.drawText(line, { x, y, size, font });
+      y -= leading;
+      line = w;
+    } else {
+      line = test;
+    }
+  }
+  if (line) page.drawText(line, { x, y, size, font });
+}
+
+// ---------- SEND EMAIL ----------
+async function sendEmail(to, pdfBase64, order_no) {
+  const payload = {
+    sender: { name: "Zlatarna Krizek", email: "noreply@krizek.hr" },
+    to: [{ email: to }],
+    subject: `Radni nalog ${order_no}`,
+    htmlContent: `<p>Poštovani,</p><p>U privitku se nalazi radni nalog <b>${order_no}</b>.</p><p>Lijep pozdrav,<br>Zlatarna Krizek</p>`,
+    attachment: [{ name: `${order_no}.pdf`, base64Content: pdfBase64 }],
+  };
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
@@ -190,112 +208,78 @@ async function sendEmail({ to, pdfBase64, orderNo }) {
     },
     body: JSON.stringify(payload),
   });
-
-  const text = await res.text();
-  if (!res.ok) throw new Error(`Brevo error: ${text}`);
-  return JSON.parse(text);
+  const txt = await res.text();
+  if (!res.ok) throw new Error(`Brevo error: ${txt}`);
+  return JSON.parse(txt);
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Main handler
-// ───────────────────────────────────────────────────────────────────────────────
+// ---------- HANDLER ----------
+export default async function handler(req, res) {
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
 
-module.exports = async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ ok: false, error: "Method not allowed" });
-  }
-
-  const { workOrderId, emailToSend, printOnly } = req.body || {};
-  if (!workOrderId) {
-    return res.status(400).json({ ok: false, error: "Missing parameter: workOrderId" });
-  }
-  if (!printOnly && !emailToSend) {
-    return res.status(400).json({ ok: false, error: "Missing parameter: emailToSend" });
+  const { workOrderId, emailToSend } = req.body || {};
+  if (!workOrderId || !emailToSend) {
+    return res
+      .status(400)
+      .json({ ok: false, error: "Missing parameters: workOrderId, emailToSend" });
   }
 
   try {
-    // 1) Work order
-    const { data: wo, error: woErr } = await supabase
+    // 1️⃣ Work order
+    const { data: order, error: woErr } = await supabase
       .from("work_orders")
       .select("*")
       .eq("id", workOrderId)
       .single();
-    if (woErr || !wo) throw new Error("Work order not found");
+    if (woErr || !order) throw new Error("Work order not found");
 
-    // 2) Linked custom order (za sve detalje s forme)
-    let co = null;
-    if (wo.custom_order_id) {
-      const { data: coRow } = await supabase
-        .from("custom_orders")
-        .select("*")
-        .eq("id", wo.custom_order_id)
-        .single();
-      co = coRow || null;
-    }
-
-    // 3) Company info (zaglavlje)
-    const { data: company } = await supabase
-      .from("company_info")
-      .select("*")
+    // 2️⃣ Company info
+    const { data: company, error: cErr } = await supabase
+      .from("company_profile")
+      .select("legal_name, address_line, city, country, email, phone, logo_url")
       .limit(1)
       .single();
+    if (cErr) console.warn("⚠️ company_profile fetch:", cErr.message);
 
-    // 4) PDF
-    const pdfBase64 = await buildPdf({ company, wo, co });
+    // 3️⃣ Generate PDF
+    const pdfBase64 = await buildPdf(order, company);
 
-    // → Ako je printOnly: vrati samo PDF (frontend će prikazati/save bez slanja)
-    if (printOnly) {
-      return res.status(200).json({
-        ok: true,
-        mode: "PRINT_ONLY",
-        order_no: wo.order_no || wo.id,
-        pdfBase64,
-      });
+    // 4️⃣ Print only
+    if (emailToSend === "printonly@local") {
+      return res.status(200).json({ ok: true, pdfBase64, order_no: order.order_no });
     }
 
-    // 5) Slanje maila
-    const email = emailToSend || wo.customer_email || co?.customer_email;
-    if (!email) throw new Error("Nema e-mail adrese primatelja");
+    // 5️⃣ Send email
+    const result = await sendEmail(emailToSend, pdfBase64, order.order_no);
 
-    const mailRes = await sendEmail({
-      to: email,
-      pdfBase64,
-      orderNo: wo.order_no || wo.id,
+    // 6️⃣ Log success
+    await supabase.rpc("fn_wo_log_email", {
+      p_work_order_id: workOrderId,
+      p_to: emailToSend,
+      p_status: "SENT",
+      p_provider_id: result?.messageId ?? null,
+      p_error: null,
+      p_payload: result ?? {},
     });
 
-    // 6) Log u bazi (ako imaš RPC fn_wo_log_email)
-    try {
-      await supabase.rpc("fn_wo_log_email", {
-        p_work_order_id: workOrderId,
-        p_to: email,
-        p_status: "SENT",
-        p_provider_id: mailRes?.messageId ?? null,
-        p_error: null,
-        p_payload: mailRes ?? {},
-      });
-    } catch (e) {
-      console.warn("⚠️ Email log RPC failed:", e.message);
-    }
-
-    return res.status(200).json({
-      ok: true,
-      mode: "EMAIL_SENT",
-      order_no: wo.order_no || wo.id,
-      mailRes,
-    });
+    return res.status(200).json({ ok: true, result });
   } catch (e) {
-    // FAIL log
+    console.error("❌ send.js error:", e.message);
+
     try {
       await supabase.rpc("fn_wo_log_email", {
-        p_work_order_id: workOrderId,
-        p_to: emailToSend || null,
+        p_work_order_id: req.body?.workOrderId ?? null,
+        p_to: req.body?.emailToSend ?? null,
         p_status: "FAILED",
         p_provider_id: null,
         p_error: e.message?.slice(0, 300) || "unknown",
         p_payload: {},
       });
-    } catch {}
+    } catch (err2) {
+      console.warn("⚠️ Logging fail:", err2.message);
+    }
 
-    return res.status(500).json({ ok: false, error: e.message || String(e) });
+    return res.status(500).json({ ok: false, error: e.message });
   }
-};
+}
