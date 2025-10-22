@@ -1,3 +1,4 @@
+// api/workorders/send.js
 import fs from "fs";
 import path from "path";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
@@ -16,85 +17,13 @@ const FONTS_DIR = path.join(process.cwd(), "public", "fonts");
 const FONT_PRIMARY = path.join(FONTS_DIR, "NotoSans-Regular.ttf");
 const FONT_FALLBACK = path.join(FONTS_DIR, "DejaVuSans.ttf");
 
-// ---------- Helpers za lookup ----------
-async function lookupLabels({ category_id, model_id, purity_id, color_id }) {
-  const result = {
-    categoryLabel: null,
-    modelName: null,
-    purityLabel: null,
-    colorLabel: null,
-  };
-
-  // batch-lookup (paralelno)
-  const tasks = [];
-
-  if (category_id) {
-    tasks.push(
-      supabase
-        .from("categories")
-        .select("name")
-        .eq("id", category_id)
-        .single()
-        .then(({ data }) => (result.categoryLabel = data?.name || null))
-        .catch(() => {})
-    );
-  }
-
-  if (model_id) {
-    tasks.push(
-      supabase
-        .from("product_models")
-        .select("name, code")
-        .eq("id", model_id)
-        .single()
-        .then(({ data }) => {
-          if (data?.name) {
-            result.modelName = data.code ? `${data.code} — ${data.name}` : data.name;
-          }
-        })
-        .catch(() => {})
-    );
-  }
-
-  if (purity_id) {
-    tasks.push(
-      supabase
-        .from("purity_options")
-        .select("label, metal")
-        .eq("id", purity_id)
-        .single()
-        .then(({ data }) => {
-          if (data?.label) {
-            result.purityLabel = data.metal ? `${data.label}` : data.label;
-          }
-        })
-        .catch(() => {})
-    );
-  }
-
-  if (color_id) {
-    tasks.push(
-      supabase
-        .from("color_options")
-        .select("label")
-        .eq("id", color_id)
-        .single()
-        .then(({ data }) => (result.colorLabel = data?.label || null))
-        .catch(() => {})
-    );
-  }
-
-  await Promise.all(tasks);
-  return result;
-}
-
+// ---------- util ----------
 function coalesce(...vals) {
   for (const v of vals) {
     if (v !== undefined && v !== null && String(v).trim() !== "") return v;
   }
   return null;
 }
-
 function formatDate(v) {
   if (!v) return "-";
   try {
@@ -103,7 +32,6 @@ function formatDate(v) {
     return String(v);
   }
 }
-
 function multiLine(page, font, text, x, y, size, maxWidth, leading) {
   const words = String(text || "-").split(/\s+/);
   let line = "";
@@ -119,6 +47,70 @@ function multiLine(page, font, text, x, y, size, maxWidth, leading) {
     }
   }
   if (line) page.drawText(line, { x, y, size, font });
+  return y;
+}
+
+// ---------- lookup labela iz ID-ova ----------
+async function lookupLabels({ category_id, model_id, purity_id, color_id }) {
+  const result = {
+    categoryLabel: null,
+    modelName: null,
+    purityLabel: null,
+    colorLabel: null,
+  };
+  const tasks = [];
+
+  if (category_id) {
+    tasks.push(
+      supabase
+        .from("categories")
+        .select("name")
+        .eq("id", category_id)
+        .single()
+        .then(({ data }) => (result.categoryLabel = data?.name || null))
+        .catch(() => {})
+    );
+  }
+  if (model_id) {
+    tasks.push(
+      supabase
+        .from("product_models")
+        .select("name, code")
+        .eq("id", model_id)
+        .single()
+        .then(({ data }) => {
+          if (data?.name) {
+            result.modelName = data.code ? `${data.code} — ${data.name}` : data.name;
+          }
+        })
+        .catch(() => {})
+    );
+  }
+  if (purity_id) {
+    tasks.push(
+      supabase
+        .from("purity_options")
+        .select("label")
+        .eq("id", purity_id)
+        .single()
+        .then(({ data }) => (result.purityLabel = data?.label || null))
+        .catch(() => {})
+    );
+  }
+  if (color_id) {
+    tasks.push(
+      supabase
+        .from("color_options")
+        .select("label")
+        .eq("id", color_id)
+        .single()
+        .then(({ data }) => (result.colorLabel = data?.label || null))
+        .catch(() => {})
+    );
+  }
+
+  await Promise.all(tasks);
+  return result;
 }
 
 // ---------- PDF Builder ----------
@@ -138,20 +130,17 @@ async function buildPdf(order, company) {
       usedFontName = "DejaVuSans.ttf";
     }
   } catch {}
-
   if (!font) {
-    // fallback na Helvetica – neće pokriti sve unicode znakove, ali PDF neće puknuti
     font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     usedFontName = "Helvetica";
   }
 
   const page = pdfDoc.addPage([595, 842]); // A4
   const { width, height } = page.getSize();
-
   const draw = (text, x, y, size = 11) =>
     page.drawText(String(text ?? "-"), { x, y, size, font, color: rgb(0, 0, 0) });
 
-  // 🏢 HEADER — COMPANY INFO
+  // 🏢 HEADER
   const companyName = company?.legal_name || "Zlatarna Krizek doo";
   const address = [company?.address_line, company?.city, company?.country].filter(Boolean).join(", ");
   const contactParts = [];
@@ -161,7 +150,6 @@ async function buildPdf(order, company) {
   const contact = contactParts.join(" | ");
 
   let y = height - 40;
-
   draw(companyName, 40, y, 16);
   if (address) draw(address, 40, y - 18, 10);
   if (contact) draw(contact, 40, y - 32, 10);
@@ -177,7 +165,6 @@ async function buildPdf(order, company) {
   draw(`Rok izrade: ${formatDate(order.due_date)}`, 300, y);
   y -= 24;
 
-  // helper za sekcije
   const section = (title) => {
     y -= 12;
     page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.5, color: rgb(0.5, 0.5, 0.5) });
@@ -219,10 +206,9 @@ async function buildPdf(order, company) {
 
   // 💬 NAPOMENE
   section("DODATNE NAPOMENE");
-  multiLine(page, font, coalesce(order.additional_comment, "-"), 60, y, 11, 460, 16);
-  y -= 100;
+  y = multiLine(page, font, coalesce(order.additional_comment, "-"), 60, y, 11, 460, 16) - 10;
 
-  // 🖼️ SKICA (ako postoji)
+  // 🖼️ SKICA
   if (order.sketch_url) {
     section("SKICA");
     try {
@@ -231,22 +217,21 @@ async function buildPdf(order, company) {
       try { img = await pdfDoc.embedPng(buf); } catch { img = await pdfDoc.embedJpg(buf); }
       const W = 180, H = 180;
       page.drawImage(img, { x: 60, y: y - H, width: W, height: H });
-      y -= H + 20;
+      y -= H + 10;
     } catch {
       draw("⚠️ Skica nije učitana", 60, y); y -= 18;
     }
   }
 
-  // 🧩 QR code (bez dodatnih paketa)
+  // 🧩 QR (bez paketa)
   try {
-    // ako ima public page za WO koristi ga; inače barem order_no
     const qrValue = `https://orcafx.vercel.app/orders/${encodeURIComponent(order.order_no || "")}`;
-    const qrPngUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(qrValue)}`;
+    const qrPngUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(qrValue)}`;
     const qrBuf = await fetch(qrPngUrl).then((r) => r.arrayBuffer());
     const qrImg = await pdfDoc.embedPng(qrBuf);
     page.drawImage(qrImg, { x: width - 130, y: 50, width: 90, height: 90 });
     draw("QR → digitalni nalog", width - 160, 40, 8);
-  } catch { /* preskoči bez pada */ }
+  } catch {}
 
   // Footer
   draw(`Generated by ORCAFX • Font: ${usedFontName} • ${new Date().toLocaleString("hr-HR")}`, 40, 40, 9);
@@ -291,7 +276,7 @@ export default async function handler(req, res) {
       .single();
     if (woErr || !wo) throw new Error("Work order not found");
 
-    // 2) Custom order (za detalje + ID-ove)
+    // 2) Pokušaj dohvatiti custom_order po linku (ako kolona postoji i popunjena)
     let co = null;
     if (wo.custom_order_id) {
       const { data, error } = await supabase
@@ -307,46 +292,62 @@ export default async function handler(req, res) {
       if (!error) co = data;
     }
 
-    // 3) Lookup labela iz ID-ova (ako treba)
-    const {
-      categoryLabel, modelName, purityLabel, colorLabel,
-    } = await lookupLabels({
-      category_id: co?.category_id,
-      model_id: co?.model_id,
-      purity_id: co?.purity_id,
-      color_id: co?.color_id,
-    });
+    // 3) Ako nema linka, fallback: najnoviji custom_order s istim emailom
+    if (!co && wo.customer_email) {
+      const { data: list } = await supabase
+        .from("custom_orders")
+        .select(
+          "id, category_id, purity_id, color_id, model_id, " +
+          "product_type, purity, color, model, " +
+          "male_size, female_size, stones, engraving_1, engraving_2, joint_engraving, additional_comment, sketch_url, " +
+          "customer_name, customer_email, customer_phone, created_at"
+        )
+        .eq("customer_email", wo.customer_email)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (list && list.length) co = list[0];
+    }
 
-    // 4) Company profile
+    // 4) Lookup labela iz ID-ova ako imamo co
+    let categoryLabel = null, modelName = null, purityLabel = null, colorLabel = null;
+    if (co) {
+      const labels = await lookupLabels({
+        category_id: co.category_id,
+        model_id: co.model_id,
+        purity_id: co.purity_id,
+        color_id: co.color_id,
+      });
+      categoryLabel = labels.categoryLabel;
+      modelName = labels.modelName;
+      purityLabel = labels.purityLabel;
+      colorLabel = labels.colorLabel;
+    }
+
+    // 5) Company
     const { data: company } = await supabase
       .from("company_profile")
       .select("legal_name, address_line, city, country, email, phone, tax_id, logo_url")
       .limit(1)
       .single();
 
-    // 5) Merge + derivacije
+    // 6) Merge i derivacije
     const merged = { ...(wo || {}), ...(co || {}) };
-
     const orderForPdf = {
-      // "glave"
       order_no: merged.order_no || wo.order_no,
       order_date: merged.order_date || wo.order_date,
       due_date: merged.due_date || wo.due_date,
       status: merged.status || wo.status,
       quantity: merged.quantity || wo.quantity || 1,
 
-      // kupac
       customer_name: coalesce(merged.customer_name, wo.customer_name),
       customer_email: coalesce(merged.customer_email, wo.customer_email),
       customer_phone: coalesce(merged.customer_phone, wo.customer_phone),
 
-      // specifikacije – pametni fallbackovi
       categoryDerived: coalesce(wo.product_type, merged.product_type, categoryLabel),
       modelDerived: coalesce(wo.model, merged.model, modelName),
       purityDerived: coalesce(wo.purity, merged.purity, purityLabel),
       colorDerived: coalesce(wo.color, merged.color, colorLabel),
 
-      // detalji
       male_size: merged.male_size,
       female_size: merged.female_size,
       stones: merged.stones,
@@ -355,22 +356,21 @@ export default async function handler(req, res) {
       joint_engraving: merged.joint_engraving,
       additional_comment: merged.additional_comment,
 
-      // skica
       sketch_url: merged.sketch_url,
     };
 
-    // 6) Build PDF
+    // 7) PDF
     const pdfBase64 = await buildPdf(orderForPdf, company);
 
-    // 7) Print only?
+    // 8) Print only?
     if (emailToSend === "printonly@local") {
       return res.status(200).json({ ok: true, pdfBase64, order_no: orderForPdf.order_no });
     }
 
-    // 8) Send mail
+    // 9) Mail
     const result = await sendEmail(emailToSend, pdfBase64, orderForPdf.order_no);
 
-    // 9) Log success
+    // 10) Log success
     await supabase.rpc("fn_wo_log_email", {
       p_work_order_id: workOrderId,
       p_to: emailToSend,
@@ -382,7 +382,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true, result });
   } catch (e) {
-    console.error("❌ send.js error:", e.message);
     try {
       await supabase.rpc("fn_wo_log_email", {
         p_work_order_id: req.body?.workOrderId ?? null,
