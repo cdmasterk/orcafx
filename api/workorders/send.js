@@ -242,7 +242,7 @@ async function sendEmail(to, pdfBase64, order_no, company_name) {
 
 // ───────────────────────────── HANDLER ─────────────────────────────
 export default async function handler(req, res) {
-  // ✅ CORS
+  // ✅ CORS fix za frontend orcafx.vercel.app
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Origin", "https://orcafx.vercel.app");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -261,22 +261,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: "Missing parameters" });
 
   try {
-    // 🔍 TEST: pokušaj s ID i s work_order_id
-    let { data: order, error } = await supabase
+    const { data: order, error } = await supabase
       .from("work_order_full_view")
       .select("*")
-      .eq("work_order_id", workOrderId)
+      .eq("id", workOrderId) // ✅ FIXED
       .single();
-
-    if (!order) {
-      const alt = await supabase
-        .from("work_order_full_view")
-        .select("*")
-        .eq("id", workOrderId)
-        .single();
-      order = alt.data;
-      error = alt.error;
-    }
 
     console.log("🔍 ORDER LOADED:", order);
     console.log("🔍 SUPABASE ERROR:", error);
