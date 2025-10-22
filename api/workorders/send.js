@@ -23,7 +23,6 @@ function formatDate(v) {
     return String(v);
   }
 }
-
 function multiLine(page, font, text, x, y, size, maxWidth, leading) {
   const words = String(text || "-").split(/\s+/);
   let line = "";
@@ -39,10 +38,11 @@ function multiLine(page, font, text, x, y, size, maxWidth, leading) {
   if (line) page.drawText(line, { x, y, size, font });
   return y - leading;
 }
-
 async function makeQRBuffer(text, sizePx = 90) {
   try {
-    const url = `https://api.qrserver.com/v1/create-qr-code/?size=${sizePx}x${sizePx}&data=${encodeURIComponent(text)}`;
+    const url = `https://api.qrserver.com/v1/create-qr-code/?size=${sizePx}x${sizePx}&data=${encodeURIComponent(
+      text
+    )}`;
     const resp = await fetch(url);
     const arr = await resp.arrayBuffer();
     return Buffer.from(arr);
@@ -52,7 +52,7 @@ async function makeQRBuffer(text, sizePx = 90) {
 }
 
 // ───────────────────────────── PDF BUILDER ─────────────────────────────
-async function buildPdf(order) {
+async function buildPdf(order, company) {
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
 
@@ -73,23 +73,21 @@ async function buildPdf(order) {
 
   let y = height - 40;
 
-  // 🏢 COMPANY INFO (iz view-a: company_name, company_address, company_tax_id itd.)
-  const name = order.company_name || "Zlatarna Krizek d.o.o.";
-  const address = [order.company_address, order.company_city, order.company_country].filter(Boolean).join(", ");
-  const tax = order.company_tax_id ? `OIB: ${order.company_tax_id}` : "";
-  const contact = [order.company_email, order.company_phone].filter(Boolean).join("  |  ");
-  const iban = order.company_iban ? `IBAN: ${order.company_iban}` : "";
+  // 🏢 COMPANY INFO
+  const name = company?.legal_name || "Zlatarna Krizek doo";
+  const address = [company?.address_line, company?.city, company?.country].filter(Boolean).join(", ");
+  const tax = company?.tax_id ? `OIB: ${company.tax_id}` : "";
+  const contact = [company?.email, company?.phone].filter(Boolean).join("  |  ");
+  const iban = company?.iban ? `IBAN: ${company.iban}` : "";
 
-  if (order.company_logo) {
+  if (company?.logo_url) {
     try {
-      const buf = await fetch(order.company_logo).then((r) => r.arrayBuffer());
-      const img = order.company_logo.endsWith(".png")
+      const buf = await fetch(company.logo_url).then((r) => r.arrayBuffer());
+      const img = company.logo_url.endsWith(".png")
         ? await pdfDoc.embedPng(buf)
         : await pdfDoc.embedJpg(buf);
       page.drawImage(img, { x: 40, y: y - 40, width: 80, height: 40 });
-    } catch {
-      draw("⚠️ Logo nije učitan", 40, y - 20);
-    }
+    } catch {}
   }
 
   draw(name, 140, y, 16, blue);
@@ -107,7 +105,7 @@ async function buildPdf(order) {
     height: 28,
     color: blue,
   });
-  draw(`RADNI NALOG ${order.order_no || order.work_order_number}`, 50, y - 20, 14, rgb(1, 1, 1));
+  draw(`RADNI NALOG ${order.order_no}`, 50, y - 20, 14, rgb(1, 1, 1));
   y -= 50;
 
   // 🕓 DATUMI
@@ -191,7 +189,7 @@ async function buildPdf(order) {
 
   // 🔲 QR kod
   try {
-    const qrPng = await makeQRBuffer(`${name} | ${order.order_no || order.work_order_number}`);
+    const qrPng = await makeQRBuffer(`${name} | ${order.order_no}`);
     if (qrPng) {
       const qrImg = await pdfDoc.embedPng(qrPng);
       page.drawImage(qrImg, { x: width - 120, y: 60, width: 70, height: 70 });
@@ -206,7 +204,7 @@ async function buildPdf(order) {
 }
 
 // ───────────────────────────── Email ─────────────────────────────
-async function sendEmail(to, pdfBase64, order_no, company_name) {
+async function sendEmail(to, pdfBase64, order_no) {
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
@@ -215,10 +213,10 @@ async function sendEmail(to, pdfBase64, order_no, company_name) {
       "api-key": BREVO_API_KEY,
     },
     body: JSON.stringify({
-      sender: { name: company_name || "Zlatarna Krizek", email: "noreply@krizek.hr" },
+      sender: { name: "Zlatarna Krizek", email: "noreply@krizek.hr" },
       to: [{ email: to }],
       subject: `Radni nalog ${order_no}`,
-      htmlContent: `<p>Poštovani,</p><p>U privitku se nalazi radni nalog <b>${order_no}</b>.</p><p>Lijep pozdrav,<br>${company_name || "Zlatarna Krizek"}</p>`,
+      htmlContent: `<p>Poštovani,</p><p>U privitku se nalazi radni nalog <b>${order_no}</b>.</p><p>Lijep pozdrav,<br>Zlatarna Krizek</p>`,
       attachment: [{ name: `${order_no}.pdf`, base64Content: pdfBase64 }],
     }),
   });
@@ -236,7 +234,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: "Missing parameters: workOrderId, emailToSend" });
 
   try {
-    // 1️⃣ Work order iz VIEW-a (koji već sadrži company_* polja iz company_info)
+    // 1️⃣ Order (iz viewa)
     const { data: order, error: orderErr } = await supabase
       .from("work_order_full_view")
       .select("*")
@@ -244,18 +242,37 @@ export default async function handler(req, res) {
       .single();
     if (orderErr || !order) throw new Error("Work order not found");
 
-    // 2️⃣ Generate PDF
-    const pdfBase64 = await buildPdf(order);
+    // 2️⃣ Company
+    const { data: company } = await supabase.from("company_profile").select("*").limit(1).single();
 
-    // 3️⃣ Print only (bez slanja maila)
+    // 3️⃣ Fallback: dopuni kategoriju, model i radionicu ako ih nema
+    if (!order.category || !order.model || !order.workshop_name) {
+      const { data: co } = await supabase
+        .from("custom_orders")
+        .select("category, model, workshop_name, product_type")
+        .eq("id", order.custom_order_id)
+        .maybeSingle();
+
+      if (co) {
+        order.category = order.category || co.category;
+        order.model = order.model || co.model;
+        order.workshop_name = order.workshop_name || co.workshop_name;
+        order.product_type = order.product_type || co.product_type;
+      }
+    }
+
+    // 4️⃣ Generate PDF
+    const pdfBase64 = await buildPdf(order, company);
+
+    // 5️⃣ Print only
     if (emailToSend === "printonly@local") {
       return res.status(200).json({ ok: true, pdfBase64, order_no: order.order_no });
     }
 
-    // 4️⃣ Send email via Brevo
-    const result = await sendEmail(emailToSend, pdfBase64, order.order_no, order.company_name);
+    // 6️⃣ Send email
+    const result = await sendEmail(emailToSend, pdfBase64, order.order_no);
 
-    // 5️⃣ Log rezultat
+    // 7️⃣ Log
     await supabase.rpc("fn_wo_log_email", {
       p_work_order_id: workOrderId,
       p_to: emailToSend,
