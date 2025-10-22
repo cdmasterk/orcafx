@@ -260,6 +260,9 @@ export default async function handler(req, res) {
       .select("*")
       .eq("work_order_id", workOrderId)
       .single();
+      console.log("🔍 ORDER LOADED:", order);
+console.log("🔍 SUPABASE ERROR:", error);
+
 
     if (error || !order) throw new Error("Work order not found");
 
