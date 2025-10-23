@@ -1,14 +1,30 @@
 {
+  "framework": "create-react-app",
+  "buildCommand": "npm run build",
+  "outputDirectory": "build",
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs20.x"
+    }
+  },
   "routes": [
     {
       "src": "/api/recalculate-prices",
       "dest": "/api/recalculate-prices.js"
+    },
+    {
+      "src": "/api/ly-reindex",
+      "dest": "/api/ly-reindex.js"
     }
   ],
   "crons": [
     {
       "path": "/api/recalculate-prices",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/ly-reindex",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
