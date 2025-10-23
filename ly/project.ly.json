@@ -1,0 +1,11 @@
+{
+  "project_key": "ORCA",
+  "name": "ORCA ERP",
+  "primary_language": "javascript",
+  "index_targets": ["src", "api", "sql", "docs", "README.md"],
+  "ignore": ["node_modules", "build", ".next", "dist", ".vercel", ".git"],
+  "schema_files": ["sql/schema.sql"],
+  "style_guide": "docs/UI_Fiori_Style.md",
+  "retrieval_tags": ["ERP", "POS", "WorkOrders", "Supabase", "Vercel"],
+  "context_priority": ["sql/schema.sql", "docs/ARCHITECTURE.md"]
+}
