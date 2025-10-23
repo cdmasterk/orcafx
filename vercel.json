@@ -9,12 +9,20 @@
   },
   "routes": [
     {
+      "src": "/api/(.*)",
+      "dest": "/api/$1.js"
+    },
+    {
       "src": "/api/recalculate-prices",
       "dest": "/api/recalculate-prices.js"
     },
     {
       "src": "/api/ly-reindex",
       "dest": "/api/ly-reindex.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/build/$1"
     }
   ],
   "crons": [
@@ -28,4 +36,3 @@
     }
   ]
 }
-
