@@ -1,0 +1,49 @@
+ORCA ERP — SYSTEM OVERVIEW
+──────────────────────────
+Frontend (React 18, CRA)
+  • Root: /src
+  • Layouts: layouts/MainLayout, MinimalLayout
+  • Auth: modules/auth/Login
+  • Core feature pods:
+      - POS: modules/pos/* (Cart, Invoices, PaymentModal, ServiceManagement, Repairs)
+      - Orders: modules/orders/* (WorkOrder*, CustomOrders*, QRCode, Files, Sketch Viewer)
+      - Warehouses: modules/warehouses/* (Dashboard, Manager, Transfer, Procurement)
+      - Finance: modules/finance/* (Dashboard, PricingRules, TaxRates, LiveStatus, PriceSheets)
+      - Reports: modules/reports/* (DailySalesReport, MetalPricesCharts/Table)
+      - Admin: modules/admin/* (Inventory, ProductImport, Pricing, RepairCatalog, CompanySettings)
+      - Dashboard: modules/dashboard/* (CashSession, Dashboard)
+  • Common UI: components/* (Navbar, Sidebar, Widgets)
+  • Data helpers: hooks/useItems, utils/*
+
+Backend / API (Vercel Functions)
+  • /api/recalculate-prices.js — nightly cron (0 3 * * *)
+  • /api/sendMail.js, /api/workorders/send.js, /api/health.js (ping)
+  • Integracije: email (nodemailer), PDF (pdf-lib, @react-pdf), Excel (xlsx), QR (qrcode)
+
+Data & Services
+  • Supabase: src/lib/supabase.js, src/supabaseClient.js
+  • Pricing: src/modules/finance/* (PriceRecalcLog, CurrentPricesTable)
+  • External: metal price feeds (LiveStatus), e-mail slanje, PDF generiranje
+
+Documents & Templates
+  • PDF: src/lib/pdf/pdf.js
+  • Excel: src/lib/excel/templates/ProductTemplate.js
+
+AI / LY Memory Hub (Index & Recall)
+  • Indexer: ly/indexRepo.js  → Supabase (ly_artifacts, ly_artifact_versions, ly_embeddings)
+  • Scope: src/**, api/**, docs/** (binarne datoteke ignorirane)
+  • Upotreba: dohvat relevantnih “chunks” koda za kontekst
+
+Key Flows (high-level)
+  1) POS → kreira prodaje/račune → PDF/print → (opcija) e-mail klijentu
+  2) Orders → WorkOrder → Files/Sketch → QR → Status/Production → Send (mail)
+  3) Finance → price recalc / rules → Live metal prices → Reports/Dashboards
+  4) Warehouse → Transfers/Procurement → Stock overview
+  5) Admin → katalozi, uvoz proizvoda, postavke, cijene, porezi
+
+Deployment
+  • Vercel (CRA build + API routes)
+  • vercel.json: CRA buildCommand + outputDirectory + cron za cijene
+  • GitHub Actions: (preporučeno) LY index hourly
+────────────────────────────────────────────────────
+NOTE: Dokument je sažetak iz strukture koda i indexiranih artefakata.

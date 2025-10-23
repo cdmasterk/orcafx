@@ -1,0 +1,64 @@
+LY MEMORY HUB ARCHITECTURE
+──────────────────────────
+[GitHub Actions] -- triggers --> [Vercel Functions / api/ly-reindex.js]
+                                     |
+                                     v
+                          [Supabase LY_MEMORY_HUB]
+                                     |
+                   ┌─────────────────┴───────────────────┐
+                   │                                     │
+             [ORCA ERP Context]                 [AegisCloud Context]
+                   │                                     │
+                   └────────────> [GPT-5 API Layer] <────┘
+                                     |
+                               [User Query / Agent]
+                                     |
+                               [Frontend Interface]
+────────────────────────────────────────────────────────
+Automation: Hourly index (GitHub Actions)
+Storage: Supabase (embeddings + metadata)
+Reasoning: GPT-5 API
+Delivery: Vercel (frontend + API endpoints)
+
+
+LY MEMORY HUB — ARCHITECTURE
+────────────────────────────
+Sources:
+  • Git repository (src/**, api/**, docs/**)  →  ly/indexRepo.js
+
+Pipeline:
+  [GitHub Actions (hourly)]  →  node ly/indexRepo.js
+                                ├─ Reads project.ly.json (targets, ignore)
+                                ├─ Walks repo, chunks text (~1600 chars)
+                                ├─ Embeds (Xenova/all-MiniLM-L6-v2)
+                                └─ Upserts to Supabase
+
+Storage (Supabase):
+  • ly_projects (project_key, name)
+  • ly_artifacts (path, content, sha, updated_at)
+  • ly_artifact_versions (artifact_id, content, sha)
+  • ly_embeddings (artifact_id, chunk_index, chunk_text, embedding, tags)
+
+Retrieval:
+  • Query → semantic search (cosine) over ly_embeddings by project_key
+  • Return top-k chunks + metadata (path, lines)
+  • Compose “context pack” for LLM (or manual copy)
+
+Usage:
+  • ORCA: code-aware assistance (POS, Orders, Finance, Warehouses, Admin)
+  • AegisCloud: security monitoring/education (future project_key=Aegis)
+  • Cross-project isolation via project_key
+
+Automation:
+  • GitHub Actions schedule: every hour (“0 * * * *”)
+  • Manual run via “Run workflow” (for urgent updates)
+
+Cost & Perf:
+  • No OpenAI tokens (local embeddings)
+  • Supabase free tier sufficient initially
+  • Re-embed samo kad se promijeni sha
+
+Security:
+  • Service Role Key samo u CI (ne u browseru)
+  • Read-only anon key u frontendu (ako je potrebno)
+────────────────────────────────────────────────────

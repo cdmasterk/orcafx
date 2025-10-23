@@ -1,0 +1,19 @@
+name: LY Memory Hub Index
+on:
+  schedule:
+    - cron: "0 * * * *"   # svaki sat
+  workflow_dispatch:
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run ly:index
+        env:
+          LY_SUPABASE_URL: ${{ secrets.LY_SUPABASE_URL }}
+          LY_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.LY_SUPABASE_SERVICE_ROLE_KEY }}
